@@ -80,9 +80,9 @@ def mm_to_pt(mm_val):
     return mm_val * MM_TO_POINT
 
 def get_or_generate_qr_image(link):
-    if not link or str(link).lower() == 'nan':
-        return None
+    if not link or str(link).lower() == 'nan': return None
     link = str(link).strip()
+    if not link: return None # Если строка пустая
     
     # 1. Попытка скачать (таймаут 3 сек)
     try:
@@ -96,8 +96,7 @@ def get_or_generate_qr_image(link):
             img_byte_arr = io.BytesIO()
             pil_img.save(img_byte_arr, format="PNG")
             return img_byte_arr.getvalue()
-    except:
-        pass 
+    except: pass 
     
     # 2. Генерация
     try:
@@ -108,8 +107,7 @@ def get_or_generate_qr_image(link):
         img_byte_arr = io.BytesIO()
         img.save(img_byte_arr, format="PNG")
         return img_byte_arr.getvalue()
-    except:
-        return None
+    except: return None
 
 def process_files(pdf_file, links, p_name, p_size, auto_center, x_mm, y_mm, size_mm):
     zip_buffer = io.BytesIO()
@@ -147,7 +145,7 @@ def process_files(pdf_file, links, p_name, p_size, auto_center, x_mm, y_mm, size
                         zf.writestr(filename, doc.convert_to_pdf())
                         success_count += 1
                 else:
-                    errors_log.append(f"Ссылка №{i}: Не удалось сгенерировать QR")
+                    errors_log.append(f"Ссылка №{i}: Пустые данные или сбой")
             except Exception as e:
                 errors_log.append(f"Ссылка №{i}: Ошибка {e}")
                 
@@ -216,32 +214,41 @@ with col_right:
         if uploaded_excel:
             try:
                 df = pd.read_excel(uploaded_excel)
-                target_col = None
                 
-                # 1. Попытка найти по названию
-                possible_names = ['link', 'ссылка', 'ссылки', 'url', 'сайт', 'web']
+                # УМНЫЙ ПОИСК КОЛОНКИ
+                best_col = None
+                max_score = 0
+                
+                # Проходим по всем колонкам и даем баллы
                 for col in df.columns:
-                    if any(name in str(col).lower() for name in possible_names):
-                        target_col = col
-                        break
+                    # Превращаем в текст, убираем пробелы
+                    series = df[col].astype(str).str.strip()
+                    # Считаем сколько ячеек похожи на ссылки (есть http, www, или точка в середине)
+                    # Условие: длина > 5 И (есть "http" ИЛИ есть "www" ИЛИ есть точка)
+                    score = series[
+                        (series.str.len() > 5) & 
+                        (series.str.contains(r'http|www|\.', regex=True))
+                    ].count()
+                    
+                    if score > max_score:
+                        max_score = score
+                        best_col = col
                 
-                # 2. Если не нашли по имени - ищем по содержимому (эвристика)
-                if not target_col:
-                    for col in df.columns:
-                        # Берем первые 5 непустых значений
-                        sample = df[col].dropna().astype(str).head(5).tolist()
-                        if not sample: continue
-                        # Если хотя бы одно начинается на http или www - берем
-                        if any(val.strip().lower().startswith(('http', 'www')) for val in sample):
-                            target_col = col
-                            break
-                
-                if target_col:
-                    links = df[target_col].dropna().astype(str).tolist()
-                    st.session_state.links_final = links
-                    st.success(f"✅ Найдено ссылок: {len(links)}")
+                if best_col:
+                    # Берем данные из лучшей колонки, убирая пустые строки
+                    raw_links = df[best_col].dropna().astype(str).tolist()
+                    # Фильтруем совсем пустые и "nan"
+                    clean_links = [l.strip() for l in raw_links if l.strip() and l.lower() != 'nan']
+                    
+                    st.session_state.links_final = clean_links
+                    
+                    if len(clean_links) > 0:
+                        st.success(f"✅ Найдено ссылок: {len(clean_links)}")
+                        # st.caption(f"(Колонка: {best_col})") # Раскомментируйте для отладки
+                    else:
+                        st.warning("Колонка найдена, но она пустая.")
                 else: 
-                    st.error("Не нашел колонку с ссылками (искал 'link' или http...)")
+                    st.error("Не нашел колонок, похожих на ссылки.")
             except Exception as e: 
                 st.error(f"Ошибка файла: {e}")
     
@@ -280,5 +287,3 @@ with col_right:
         with btn_col2:
             if st.button("Начать заново", type="secondary"):
                 st.session_state.zip_result = None
-                st.session_state.links_final = []
-                st.rerun()
