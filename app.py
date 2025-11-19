@@ -19,7 +19,6 @@ st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;800&display=swap" rel="stylesheet">
 <style>
     /* 1. ГЛОБАЛЬНЫЕ НАСТРОЙКИ */
-    /* Принудительный белый фон для основного контейнера (на случай если конфиг не сработает) */
     .stApp {
         background-color: #FFFFFF !important;
     }
@@ -53,7 +52,7 @@ st.markdown("""
         margin-bottom: 20px !important;
     }
     
-    /* Скрываем системные элементы Streamlit */
+    /* Скрываем системные элементы */
     header {visibility: hidden;}
     footer {visibility: hidden;}
     #MainMenu {visibility: hidden;}
@@ -62,13 +61,12 @@ st.markdown("""
         padding-bottom: 5rem !important;
     }
 
-    /* 3. ИНПУТЫ (ПОЛЯ ВВОДА) */
+    /* 3. ИНПУТЫ */
     div[data-baseweb="input"] > div {
         border-radius: 14px !important;
         border: 1px solid #E0E0E0 !important;
         background-color: #FFFFFF !important;
     }
-    /* При фокусе - черная рамка вместо красной */
     div[data-baseweb="input"] > div:focus-within {
         border-color: #000 !important;
         box-shadow: none !important;
@@ -83,7 +81,7 @@ st.markdown("""
         color: rgba(0,0,0,0.6) !important;
     }
     
-    /* КНОПКИ +/- В NUMBER INPUT (Убираем красный цвет) */
+    /* КНОПКИ +/- */
     button[kind="secondary"] {
         border: none !important;
         background: transparent !important;
@@ -100,7 +98,7 @@ st.markdown("""
         background: #E0E0E0 !important;
     }
 
-    /* 4. ОСНОВНЫЕ КНОПКИ (Генерация / Скачать) */
+    /* 4. КНОПКИ ДЕЙСТВИЯ */
     div.stButton, div.stDownloadButton {
         width: 100% !important;
     }
@@ -123,7 +121,6 @@ st.markdown("""
         color: #FFFFFF !important;
         border: none !important;
     }
-    /* Убираем красную обводку при нажатии */
     div.stButton > button:focus, div.stButton > button:active {
         background-color: #000000 !important;
         color: #FFFFFF !important;
@@ -131,7 +128,7 @@ st.markdown("""
         box-shadow: none !important;
     }
 
-    /* 5. ЗАГРУЗЧИК ФАЙЛОВ */
+    /* 5. ЗАГРУЗЧИК */
     [data-testid="stFileUploader"] {
         padding: 20px !important;
         background-color: #F7F7F7 !important;
@@ -145,7 +142,7 @@ st.markdown("""
         border-color: #000 !important;
     }
     
-    /* 6. ТАБЫ (Вручную / Из Excel) */
+    /* 6. ТАБЫ */
     .stTabs [data-baseweb="tab-list"] {
         border-bottom: 2px solid #eee !important;
         gap: 30px !important;
@@ -158,13 +155,11 @@ st.markdown("""
         border: none !important;
         padding-bottom: 10px !important;
     }
-    /* Активный таб - черный */
     .stTabs [aria-selected="true"] {
         color: #000 !important;
         border-bottom: 2px solid #000 !important;
     }
     
-    /* Убираем красную полоску (focus ring) у всех элементов */
     *:focus-visible {
         outline: none !important;
         box-shadow: none !important;
@@ -250,4 +245,61 @@ with col_right:
     
     links_final = []
     with tab_manual:
-        st.write("
+        st.write("")
+        manual_text = st.text_area("Вставьте ссылки списком:", height=150, placeholder="https://...\nhttps://...", label_visibility="collapsed")
+        if manual_text:
+            links_final = [l.strip() for l in manual_text.split('\n') if l.strip()]
+            
+    with tab_excel:
+        st.write("")
+        uploaded_excel = st.file_uploader("Загрузите excel", type=["xlsx"], key="xls", label_visibility="collapsed")
+        if uploaded_excel:
+            try:
+                df = pd.read_excel(uploaded_excel)
+                cols = [c for c in df.columns if 'link' in str(c).lower() or 'ссылк' in str(c).lower()]
+                if cols:
+                    links_final = df[cols[0]].dropna().astype(str).tolist()
+                    st.success(f"Найдено ссылок: {len(links_final)}")
+            except Exception as e:
+                st.error(f"Ошибка чтения файла: {e}")
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    st.markdown('<div class="description" style="margin-bottom:10px;">Источник макета</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title" style="margin-top:0;">Загрузите дизайн</div>', unsafe_allow_html=True)
+    
+    uploaded_pdf = st.file_uploader("PDF макет", type=["pdf"], key="pdf", label_visibility="collapsed")
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # КНОПКИ
+    if "zip_result" not in st.session_state:
+        st.session_state.zip_result = None
+        st.session_state.zip_name = ""
+
+    if st.session_state.zip_result is None:
+        # КНОПКА ГЕНЕРАЦИИ
+        if st.button("Генерация"):
+            if not uploaded_pdf:
+                st.toast("Нужен PDF макет!", icon="⚠️")
+            elif not links_final:
+                st.toast("Нужны ссылки!", icon="⚠️")
+            else:
+                with st.spinner("Работаем..."):
+                    p_n = partner_name if partner_name else "partner"
+                    s_n = size_name if size_name else "size"
+                    res = process_files(uploaded_pdf, links_final, p_n, s_n, x_mm, y_mm, size_mm)
+                    st.session_state.zip_result = res
+                    st.session_state.zip_name = f"{p_n}_{s_n}.zip"
+                    st.rerun()
+    else:
+        # КНОПКА СКАЧИВАНИЯ
+        st.download_button(
+            label="Скачать архив",
+            data=st.session_state.zip_result,
+            file_name=st.session_state.zip_name,
+            mime="application/zip"
+        )
+        if st.button("Начать заново", type="secondary"):
+            st.session_state.zip_result = None
+            st.rerun()
