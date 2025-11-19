@@ -53,18 +53,18 @@ st.markdown("""
     div[data-baseweb="input"] > div {border-radius: 14px !important; border: 1px solid #E0E0E0 !important; background-color: #FFFFFF !important;}
     div[data-baseweb="input"] > div:focus-within {border-color: #000 !important;}
     
-    /* === НАСТРОЙКА КНОПОК (РАСТЯГИВАЕМ НА ВСЮ ШИРИНУ) === */
+    /* === НАСТРОЙКА КНОПОК (ДЛИННЫЕ И С ОТСТУПАМИ) === */
     div.stButton, div.stDownloadButton {
         width: 100% !important;
         display: block !important;
     }
     div.stButton > button, div.stDownloadButton > button {
-        width: 100% !important;                  /* Растягиваем на 100% ширины */
-        min-width: 100% !important;              /* Гарантируем минимальную ширину */
+        width: 100% !important;                  
+        min-width: 300px !important;             /* Минимальная длина, чтобы не была квадратом */
         background-color: #000000 !important; 
         color: #FFFFFF !important;
         border-radius: 14px !important; 
-        padding: 18px 0px !important;            /* Убрали боковые отступы, чтобы текст центрировался в широкой кнопке */
+        padding: 18px 40px !important;           /* 40px по бокам - воздух для текста */
         font-size: 18px !important; 
         font-weight: 500 !important; 
         border: none !important;
@@ -166,7 +166,6 @@ def process_files(pdf_file, links, p_name, p_size, auto_center, x_mm, y_mm, size
     return zip_buffer, errors_log
 
 # --- ВЕРСТКА ---
-# ИЗМЕНЕНИЕ: Правая колонка стала чуть шире (было 1.3 / 0.1 / 1, стало 1.2 / 0.1 / 1.1)
 col_left, col_spacer, col_right = st.columns([1.2, 0.1, 1.1])
 
 # === ЛЕВАЯ КОЛОНКА ===
