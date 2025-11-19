@@ -84,7 +84,7 @@ def get_or_generate_qr_image(link):
         return None
     link = str(link).strip()
     
-    # 1. Попытка скачать (таймаут уменьшен до 3 сек для скорости)
+    # 1. Попытка скачать (таймаут 3 сек)
     try:
         download_url = link
         if not download_url.startswith('http'):
@@ -99,7 +99,7 @@ def get_or_generate_qr_image(link):
     except:
         pass 
     
-    # 2. Генерация, если скачать не вышло
+    # 2. Генерация
     try:
         qr = qrcode.QRCode(box_size=10, border=0)
         qr.add_data(link)
@@ -119,14 +119,11 @@ def process_files(pdf_file, links, p_name, p_size, auto_center, x_mm, y_mm, size
     errors_log = []
     total_links = len(links)
     
-    # Полоса загрузки
     my_bar = st.progress(0, text="Начинаем обработку...")
     
     with zipfile.ZipFile(zip_buffer, "w") as zf:
         for i, url in enumerate(links, start=1):
-            # Обновляем прогресс бар
             my_bar.progress(i / total_links, text=f"Обработка {i} из {total_links}")
-            
             try:
                 filename = f"{p_name}_{p_size}_{i:02d}.pdf"
                 qr_bytes = get_or_generate_qr_image(url)
@@ -154,7 +151,7 @@ def process_files(pdf_file, links, p_name, p_size, auto_center, x_mm, y_mm, size
             except Exception as e:
                 errors_log.append(f"Ссылка №{i}: Ошибка {e}")
                 
-    my_bar.empty() # Убираем полосу загрузки
+    my_bar.empty()
     zip_buffer.seek(0)
     
     if success_count == 0: 
@@ -202,7 +199,6 @@ with col_right:
     st.write("")
     st.markdown('<div class="description" style="margin-bottom:0;">Источник ссылок QR</div>', unsafe_allow_html=True)
     
-    # Инициализация списка в session_state, чтобы он не пропадал
     if 'links_final' not in st.session_state:
         st.session_state.links_final = []
 
@@ -220,16 +216,34 @@ with col_right:
         if uploaded_excel:
             try:
                 df = pd.read_excel(uploaded_excel)
-                cols = [c for c in df.columns if 'link' in str(c).lower() or 'ссылк' in str(c).lower()]
-                if cols: 
-                    links = df[cols[0]].dropna().astype(str).tolist()
+                target_col = None
+                
+                # 1. Попытка найти по названию
+                possible_names = ['link', 'ссылка', 'ссылки', 'url', 'сайт', 'web']
+                for col in df.columns:
+                    if any(name in str(col).lower() for name in possible_names):
+                        target_col = col
+                        break
+                
+                # 2. Если не нашли по имени - ищем по содержимому (эвристика)
+                if not target_col:
+                    for col in df.columns:
+                        # Берем первые 5 непустых значений
+                        sample = df[col].dropna().astype(str).head(5).tolist()
+                        if not sample: continue
+                        # Если хотя бы одно начинается на http или www - берем
+                        if any(val.strip().lower().startswith(('http', 'www')) for val in sample):
+                            target_col = col
+                            break
+                
+                if target_col:
+                    links = df[target_col].dropna().astype(str).tolist()
                     st.session_state.links_final = links
-                    # ВОТ ОНА, ВЕРНУВШАЯСЯ СТРОЧКА:
                     st.success(f"✅ Найдено ссылок: {len(links)}")
                 else: 
-                    st.error("Нет колонки 'link'")
-            except: 
-                st.error("Ошибка файла")
+                    st.error("Не нашел колонку с ссылками (искал 'link' или http...)")
+            except Exception as e: 
+                st.error(f"Ошибка файла: {e}")
     
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown('<div class="description" style="margin-bottom:10px;">Источник макета</div>', unsafe_allow_html=True)
@@ -246,7 +260,6 @@ with col_right:
             if not uploaded_pdf: st.toast("Нужен PDF!", icon="⚠️")
             elif not st.session_state.links_final: st.toast("Нужны ссылки!", icon="⚠️")
             else:
-                # Запуск
                 p_n = partner_name if partner_name else "partner"
                 s_n = size_name if size_name else "size"
                 res, errs = process_files(uploaded_pdf, st.session_state.links_final, p_n, s_n, auto_pos, x_mm, y_mm, size_mm)
@@ -267,5 +280,5 @@ with col_right:
         with btn_col2:
             if st.button("Начать заново", type="secondary"):
                 st.session_state.zip_result = None
-                st.session_state.links_final = [] # Сбрасываем ссылки при рестарте
+                st.session_state.links_final = []
                 st.rerun()
