@@ -53,12 +53,24 @@ st.markdown("""
     div[data-baseweb="input"] > div {border-radius: 14px !important; border: 1px solid #E0E0E0 !important; background-color: #FFFFFF !important;}
     div[data-baseweb="input"] > div:focus-within {border-color: #000 !important;}
     
-    /* КНОПКИ */
-    div.stButton, div.stDownloadButton {width: 100% !important;}
+    /* === НАСТРОЙКА КНОПОК (РАСТЯГИВАЕМ НА ВСЮ ШИРИНУ) === */
+    div.stButton, div.stDownloadButton {
+        width: 100% !important;
+        display: block !important;
+    }
     div.stButton > button, div.stDownloadButton > button {
-        width: 100% !important; background-color: #000000 !important; color: #FFFFFF !important;
-        border-radius: 14px !important; padding: 18px 10px !important; font-size: 18px !important; font-weight: 500 !important; border: none !important;
-        display: flex !important; justify-content: center !important;
+        width: 100% !important;                  /* Растягиваем на 100% ширины */
+        min-width: 100% !important;              /* Гарантируем минимальную ширину */
+        background-color: #000000 !important; 
+        color: #FFFFFF !important;
+        border-radius: 14px !important; 
+        padding: 18px 0px !important;            /* Убрали боковые отступы, чтобы текст центрировался в широкой кнопке */
+        font-size: 18px !important; 
+        font-weight: 500 !important; 
+        border: none !important;
+        display: flex !important; 
+        justify-content: center !important;
+        align-items: center !important;
         white-space: nowrap !important;
     }
     div.stButton > button:hover, div.stDownloadButton > button:hover {background-color: #333333 !important;}
@@ -82,14 +94,12 @@ def mm_to_pt(mm_val):
 def get_or_generate_qr_image(link):
     if not link or str(link).lower() == 'nan': return None
     link = str(link).strip()
-    if not link: return None # Если строка пустая
+    if not link: return None 
     
-    # 1. Попытка скачать (таймаут 3 сек)
     try:
         download_url = link
         if not download_url.startswith('http'):
             download_url = 'https://' + download_url
-        
         resp = requests.get(download_url, headers=HEADERS, timeout=3)
         if resp.status_code == 200:
             pil_img = Image.open(io.BytesIO(resp.content))
@@ -98,7 +108,6 @@ def get_or_generate_qr_image(link):
             return img_byte_arr.getvalue()
     except: pass 
     
-    # 2. Генерация
     try:
         qr = qrcode.QRCode(box_size=10, border=0)
         qr.add_data(link)
@@ -157,7 +166,8 @@ def process_files(pdf_file, links, p_name, p_size, auto_center, x_mm, y_mm, size
     return zip_buffer, errors_log
 
 # --- ВЕРСТКА ---
-col_left, col_spacer, col_right = st.columns([1.3, 0.1, 1])
+# ИЗМЕНЕНИЕ: Правая колонка стала чуть шире (было 1.3 / 0.1 / 1, стало 1.2 / 0.1 / 1.1)
+col_left, col_spacer, col_right = st.columns([1.2, 0.1, 1.1])
 
 # === ЛЕВАЯ КОЛОНКА ===
 with col_left:
@@ -214,37 +224,24 @@ with col_right:
         if uploaded_excel:
             try:
                 df = pd.read_excel(uploaded_excel)
-                
-                # УМНЫЙ ПОИСК КОЛОНКИ
                 best_col = None
                 max_score = 0
-                
-                # Проходим по всем колонкам и даем баллы
                 for col in df.columns:
-                    # Превращаем в текст, убираем пробелы
                     series = df[col].astype(str).str.strip()
-                    # Считаем сколько ячеек похожи на ссылки (есть http, www, или точка в середине)
-                    # Условие: длина > 5 И (есть "http" ИЛИ есть "www" ИЛИ есть точка)
                     score = series[
                         (series.str.len() > 5) & 
                         (series.str.contains(r'http|www|\.', regex=True))
                     ].count()
-                    
                     if score > max_score:
                         max_score = score
                         best_col = col
                 
                 if best_col:
-                    # Берем данные из лучшей колонки, убирая пустые строки
                     raw_links = df[best_col].dropna().astype(str).tolist()
-                    # Фильтруем совсем пустые и "nan"
                     clean_links = [l.strip() for l in raw_links if l.strip() and l.lower() != 'nan']
-                    
                     st.session_state.links_final = clean_links
-                    
                     if len(clean_links) > 0:
                         st.success(f"✅ Найдено ссылок: {len(clean_links)}")
-                        # st.caption(f"(Колонка: {best_col})") # Раскомментируйте для отладки
                     else:
                         st.warning("Колонка найдена, но она пустая.")
                 else: 
@@ -287,3 +284,5 @@ with col_right:
         with btn_col2:
             if st.button("Начать заново", type="secondary"):
                 st.session_state.zip_result = None
+                st.session_state.links_final = []
+                st.rerun()
