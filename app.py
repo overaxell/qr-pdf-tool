@@ -15,7 +15,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- ЖЕСТКИЙ CUSTOM CSS ---
+# --- CSS СТИЛИ ---
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;800&display=swap" rel="stylesheet">
 <style>
@@ -30,23 +30,19 @@ st.markdown("""
     .big-title {
         font-size: 96px !important; 
         font-weight: 800 !important; 
-        line-height: 1.1 !important; /* Чуть увеличили высоту строки, чтобы не слипалось */
+        line-height: 1.0 !important; 
         letter-spacing: -3px !important;
-        margin-bottom: 25px !important; /* Явный отступ снизу до текста */
+        margin-bottom: 25px !important;
         display: block !important;
     }
-    
-    /* Описание */
     .description {
         font-size: 18px !important; 
         color: #666 !important; 
         line-height: 1.5 !important;
-        margin-top: 0px !important;
         margin-bottom: 20px !important;
-        max-width: 650px; /* Чуть шире, чтобы текст красиво ложился */
+        max-width: 650px;
         display: block !important;
     }
-    
     .section-title {font-size: 32px !important; font-weight: 600 !important; margin-top: 30px !important;}
     
     /* СКРЫВАЕМ ЛИШНЕЕ */
@@ -68,7 +64,7 @@ st.markdown("""
     div.stButton > button:hover, div.stDownloadButton > button:hover {background-color: #333333 !important;}
     div.stButton > button p, div.stDownloadButton > button p {color: #FFFFFF !important;}
     
-    /* TAB STYLES */
+    /* ТАБЫ */
     .stTabs [data-baseweb="tab-list"] {border-bottom: 2px solid #eee !important;}
     .stTabs [aria-selected="true"] {color: #000 !important; border-bottom: 2px solid #000 !important;}
     
@@ -87,17 +83,23 @@ def get_or_generate_qr_image(link):
     if not link or str(link).lower() == 'nan':
         return None
     link = str(link).strip()
+    
+    # 1. Попытка скачать (таймаут уменьшен до 3 сек для скорости)
     try:
         download_url = link
         if not download_url.startswith('http'):
             download_url = 'https://' + download_url
-        resp = requests.get(download_url, headers=HEADERS, timeout=5)
+        
+        resp = requests.get(download_url, headers=HEADERS, timeout=3)
         if resp.status_code == 200:
             pil_img = Image.open(io.BytesIO(resp.content))
             img_byte_arr = io.BytesIO()
             pil_img.save(img_byte_arr, format="PNG")
             return img_byte_arr.getvalue()
-    except: pass 
+    except:
+        pass 
+    
+    # 2. Генерация, если скачать не вышло
     try:
         qr = qrcode.QRCode(box_size=10, border=0)
         qr.add_data(link)
@@ -106,7 +108,8 @@ def get_or_generate_qr_image(link):
         img_byte_arr = io.BytesIO()
         img.save(img_byte_arr, format="PNG")
         return img_byte_arr.getvalue()
-    except: return None
+    except:
+        return None
 
 def process_files(pdf_file, links, p_name, p_size, auto_center, x_mm, y_mm, size_mm):
     zip_buffer = io.BytesIO()
@@ -114,11 +117,20 @@ def process_files(pdf_file, links, p_name, p_size, auto_center, x_mm, y_mm, size
     pdf_bytes = pdf_file.read()
     success_count = 0
     errors_log = []
+    total_links = len(links)
+    
+    # Полоса загрузки
+    my_bar = st.progress(0, text="Начинаем обработку...")
+    
     with zipfile.ZipFile(zip_buffer, "w") as zf:
         for i, url in enumerate(links, start=1):
+            # Обновляем прогресс бар
+            my_bar.progress(i / total_links, text=f"Обработка {i} из {total_links}")
+            
             try:
                 filename = f"{p_name}_{p_size}_{i:02d}.pdf"
                 qr_bytes = get_or_generate_qr_image(url)
+                
                 if qr_bytes:
                     with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
                         page = doc[0]
@@ -132,14 +144,21 @@ def process_files(pdf_file, links, p_name, p_size, auto_center, x_mm, y_mm, size
                             x_pt = mm_to_pt(x_mm)
                             y_pt = mm_to_pt(y_mm)
                             qr_size_pt = mm_to_pt(size_mm)
+                        
                         rect = fitz.Rect(x_pt, y_pt, x_pt + qr_size_pt, y_pt + qr_size_pt)
                         page.insert_image(rect, stream=qr_bytes)
                         zf.writestr(filename, doc.convert_to_pdf())
                         success_count += 1
-                else: errors_log.append(f"Ссылка №{i}: Сбой QR")
-            except Exception as e: errors_log.append(f"Ссылка №{i}: Ошибка {e}")
+                else:
+                    errors_log.append(f"Ссылка №{i}: Не удалось сгенерировать QR")
+            except Exception as e:
+                errors_log.append(f"Ссылка №{i}: Ошибка {e}")
+                
+    my_bar.empty() # Убираем полосу загрузки
     zip_buffer.seek(0)
-    if success_count == 0: return None, errors_log
+    
+    if success_count == 0: 
+        return None, errors_log
     return zip_buffer, errors_log
 
 # --- ВЕРСТКА ---
@@ -147,7 +166,6 @@ col_left, col_spacer, col_right = st.columns([1.3, 0.1, 1])
 
 # === ЛЕВАЯ КОЛОНКА ===
 with col_left:
-    # ОБЪЕДИНЕННЫЙ БЛОК HTML ДЛЯ ЗАГОЛОВКА И ОПИСАНИЯ
     st.markdown("""
     <div>
         <div class="big-title">Кюарыч</div>
@@ -183,12 +201,19 @@ with col_right:
     st.write("")
     st.write("")
     st.markdown('<div class="description" style="margin-bottom:0;">Источник ссылок QR</div>', unsafe_allow_html=True)
+    
+    # Инициализация списка в session_state, чтобы он не пропадал
+    if 'links_final' not in st.session_state:
+        st.session_state.links_final = []
+
     tab_manual, tab_excel = st.tabs(["Вручную", "Из excel"])
-    links_final = []
+    
     with tab_manual:
         st.write("")
         manual_text = st.text_area("Ссылки списком", height=150, label_visibility="collapsed")
-        if manual_text: links_final = [l.strip() for l in manual_text.split('\n') if l.strip()]
+        if manual_text: 
+            st.session_state.links_final = [l.strip() for l in manual_text.split('\n') if l.strip()]
+    
     with tab_excel:
         st.write("")
         uploaded_excel = st.file_uploader("Excel", type=["xlsx"], key="xls", label_visibility="collapsed")
@@ -196,9 +221,15 @@ with col_right:
             try:
                 df = pd.read_excel(uploaded_excel)
                 cols = [c for c in df.columns if 'link' in str(c).lower() or 'ссылк' in str(c).lower()]
-                if cols: links_final = df[cols[0]].dropna().astype(str).tolist()
-                else: st.error("Нет колонки 'link'")
-            except: st.error("Ошибка файла")
+                if cols: 
+                    links = df[cols[0]].dropna().astype(str).tolist()
+                    st.session_state.links_final = links
+                    # ВОТ ОНА, ВЕРНУВШАЯСЯ СТРОЧКА:
+                    st.success(f"✅ Найдено ссылок: {len(links)}")
+                else: 
+                    st.error("Нет колонки 'link'")
+            except: 
+                st.error("Ошибка файла")
     
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown('<div class="description" style="margin-bottom:10px;">Источник макета</div>', unsafe_allow_html=True)
@@ -213,18 +244,22 @@ with col_right:
     if st.session_state.zip_result is None:
         if st.button("Генерация"):
             if not uploaded_pdf: st.toast("Нужен PDF!", icon="⚠️")
-            elif not links_final: st.toast("Нужны ссылки!", icon="⚠️")
+            elif not st.session_state.links_final: st.toast("Нужны ссылки!", icon="⚠️")
             else:
-                with st.spinner("Обработка..."):
-                    p_n = partner_name if partner_name else "partner"
-                    s_n = size_name if size_name else "size"
-                    res, errs = process_files(uploaded_pdf, links_final, p_n, s_n, auto_pos, x_mm, y_mm, size_mm)
-                    if res:
-                        st.session_state.zip_result = res
-                        st.session_state.zip_name = f"{p_n}_{s_n}.zip"
-                        st.rerun()
-                    else:
-                        st.error("Ошибка. Проверьте ссылки.")
+                # Запуск
+                p_n = partner_name if partner_name else "partner"
+                s_n = size_name if size_name else "size"
+                res, errs = process_files(uploaded_pdf, st.session_state.links_final, p_n, s_n, auto_pos, x_mm, y_mm, size_mm)
+                
+                if res:
+                    st.session_state.zip_result = res
+                    st.session_state.zip_name = f"{p_n}_{s_n}.zip"
+                    st.rerun()
+                else:
+                    st.error("Ошибка. Проверьте ссылки.")
+                    if errs:
+                        with st.expander("Ошибки"):
+                            for e in errs: st.write(e)
     else:
         btn_col1, btn_col2 = st.columns(2, gap="small")
         with btn_col1:
@@ -232,4 +267,5 @@ with col_right:
         with btn_col2:
             if st.button("Начать заново", type="secondary"):
                 st.session_state.zip_result = None
+                st.session_state.links_final = [] # Сбрасываем ссылки при рестарте
                 st.rerun()
