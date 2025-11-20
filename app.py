@@ -53,18 +53,18 @@ st.markdown("""
     div[data-baseweb="input"] > div {border-radius: 14px !important; border: 1px solid #E0E0E0 !important; background-color: #FFFFFF !important;}
     div[data-baseweb="input"] > div:focus-within {border-color: #000 !important;}
     
-    /* === НАСТРОЙКА КНОПОК (ДЛИННЫЕ И С ОТСТУПАМИ) === */
+    /* КНОПКИ */
     div.stButton, div.stDownloadButton {
         width: 100% !important;
         display: block !important;
     }
     div.stButton > button, div.stDownloadButton > button {
         width: 100% !important;                  
-        min-width: 300px !important;             /* Минимальная длина, чтобы не была квадратом */
+        min-width: 300px !important;
         background-color: #000000 !important; 
         color: #FFFFFF !important;
         border-radius: 14px !important; 
-        padding: 18px 40px !important;           /* 40px по бокам - воздух для текста */
+        padding: 18px 40px !important;
         font-size: 18px !important; 
         font-weight: 500 !important; 
         border: none !important;
@@ -88,14 +88,19 @@ st.markdown("""
 MM_TO_POINT = 72 / 25.4
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-def mm_to_pt(mm_val):
+
+def mm_to_pt(mm_val: float) -> float:
     return mm_val * MM_TO_POINT
 
-def get_or_generate_qr_image(link):
-    if not link or str(link).lower() == 'nan': return None
+
+def get_or_generate_qr_image(link: str):
+    if not link or str(link).lower() == 'nan':
+        return None
     link = str(link).strip()
-    if not link: return None 
-    
+    if not link:
+        return None
+
+    # 1) Пытаемся скачать как картинку
     try:
         download_url = link
         if not download_url.startswith('http'):
@@ -106,8 +111,10 @@ def get_or_generate_qr_image(link):
             img_byte_arr = io.BytesIO()
             pil_img.save(img_byte_arr, format="PNG")
             return img_byte_arr.getvalue()
-    except: pass 
-    
+    except Exception:
+        pass
+
+    # 2) Иначе генерируем QR по ссылке
     try:
         qr = qrcode.QRCode(box_size=10, border=0)
         qr.add_data(link)
@@ -116,7 +123,9 @@ def get_or_generate_qr_image(link):
         img_byte_arr = io.BytesIO()
         img.save(img_byte_arr, format="PNG")
         return img_byte_arr.getvalue()
-    except: return None
+    except Exception:
+        return None
+
 
 def process_files(pdf_file, links, p_name, p_size, auto_center, x_mm, y_mm, size_mm):
     zip_buffer = io.BytesIO()
@@ -125,19 +134,20 @@ def process_files(pdf_file, links, p_name, p_size, auto_center, x_mm, y_mm, size
     success_count = 0
     errors_log = []
     total_links = len(links)
-    
+
     my_bar = st.progress(0, text="Начинаем обработку...")
-    
+
     with zipfile.ZipFile(zip_buffer, "w") as zf:
         for i, url in enumerate(links, start=1):
             my_bar.progress(i / total_links, text=f"Обработка {i} из {total_links}")
             try:
                 filename = f"{p_name}_{p_size}_{i:02d}.pdf"
                 qr_bytes = get_or_generate_qr_image(url)
-                
+
                 if qr_bytes:
                     with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
                         page = doc[0]
+
                         if auto_center:
                             page_w = page.rect.width
                             page_h = page.rect.height
@@ -148,22 +158,23 @@ def process_files(pdf_file, links, p_name, p_size, auto_center, x_mm, y_mm, size
                             x_pt = mm_to_pt(x_mm)
                             y_pt = mm_to_pt(y_mm)
                             qr_size_pt = mm_to_pt(size_mm)
-                        
+
                         rect = fitz.Rect(x_pt, y_pt, x_pt + qr_size_pt, y_pt + qr_size_pt)
                         page.insert_image(rect, stream=qr_bytes)
                         zf.writestr(filename, doc.convert_to_pdf())
                         success_count += 1
                 else:
-                    errors_log.append(f"Ссылка №{i}: Пустые данные или сбой")
+                    errors_log.append(f"Ссылка №{i}: Пустые данные или сбой при создании QR")
             except Exception as e:
                 errors_log.append(f"Ссылка №{i}: Ошибка {e}")
-                
+
     my_bar.empty()
     zip_buffer.seek(0)
-    
-    if success_count == 0: 
+
+    if success_count == 0:
         return None, errors_log
     return zip_buffer, errors_log
+
 
 # --- ВЕРСТКА ---
 col_left, col_spacer, col_right = st.columns([1.2, 0.1, 1.1])
@@ -179,94 +190,138 @@ with col_left:
         </div>
     </div>
     """, unsafe_allow_html=True)
-    
+
     st.markdown("<hr>", unsafe_allow_html=True)
-    
+
     st.markdown('<div class="section-title">Как назвать файл?</div>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
-    with c1: partner_name = st.text_input("Имя партнера", placeholder="Partner")
-    with c2: size_name = st.text_input("Размер файла", placeholder="7x7")
-        
+    with c1:
+        partner_name = st.text_input("Имя партнера", placeholder="Partner")
+    with c2:
+        size_name = st.text_input("Размер файла", placeholder="7x7")
+
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown('<div class="section-title">Куда вставить QR?</div>', unsafe_allow_html=True)
-    
+
     auto_pos = st.toggle("Авто-центрирование (1/3 ширины)", value=True)
     if not auto_pos:
         g1, g2, g3 = st.columns(3)
-        with g1: x_mm = st.number_input("Отступ слева", value=20.0)
-        with g2: y_mm = st.number_input("Отступ сверху", value=20.0)
-        with g3: size_mm = st.number_input("Размер кюара", value=20.0)
+        with g1:
+            x_mm = st.number_input("Отступ слева (мм)", value=20.0)
+        with g2:
+            y_mm = st.number_input("Отступ сверху (мм)", value=20.0)
+        with g3:
+            size_mm = st.number_input("Размер QR (мм)", value=20.0)
     else:
         st.info("QR встанет ровно по центру.")
-        x_mm, y_mm, size_mm = 0, 0, 0
+        x_mm, y_mm, size_mm = 0.0, 0.0, 0.0
 
 # === ПРАВАЯ КОЛОНКА ===
 with col_right:
     st.write("")
     st.write("")
     st.markdown('<div class="description" style="margin-bottom:0;">Источник ссылок QR</div>', unsafe_allow_html=True)
-    
+
     if 'links_final' not in st.session_state:
         st.session_state.links_final = []
 
     tab_manual, tab_excel = st.tabs(["Вручную", "Из excel"])
-    
+
+    # --- ВКЛАДКА "ВРУЧНУЮ" ---
     with tab_manual:
         st.write("")
         manual_text = st.text_area("Ссылки списком", height=150, label_visibility="collapsed")
-        if manual_text: 
-            st.session_state.links_final = [l.strip() for l in manual_text.split('\n') if l.strip()]
-    
+        if manual_text:
+            st.session_state.links_final = [
+                l.strip()
+                for l in manual_text.split("\n")
+                if l.strip()
+            ]
+
+    # --- ВКЛАДКА "ИЗ EXCEL" (ИСПРАВЛЕННАЯ) ---
     with tab_excel:
         st.write("")
         uploaded_excel = st.file_uploader("Excel", type=["xlsx"], key="xls", label_visibility="collapsed")
         if uploaded_excel:
             try:
-                df = pd.read_excel(uploaded_excel)
+                # Читаем всё как строки, не превращая автоматически в NaN
+                df = pd.read_excel(uploaded_excel, dtype=str, keep_default_na=False)
+
                 best_col = None
                 max_score = 0
+
+                # Ищем колонку, которая больше всего похожа на колонку со ссылками
                 for col in df.columns:
-                    series = df[col].astype(str).str.strip()
+                    series = df[col].fillna("").astype(str).str.strip()
+
                     score = series[
-                        (series.str.len() > 5) & 
-                        (series.str.contains(r'http|www|\.', regex=True))
+                        (series.str.len() > 5) &
+                        (series.str.contains(r'http|www|\.', regex=True, case=False))
                     ].count()
+
                     if score > max_score:
                         max_score = score
                         best_col = col
-                
+
                 if best_col:
-                    raw_links = df[best_col].dropna().astype(str).tolist()
-                    clean_links = [l.strip() for l in raw_links if l.strip() and l.lower() != 'nan']
+                    raw_links = df[best_col].fillna("").astype(str).tolist()
+
+                    # Чистим список ссылок: убираем пустое и явный мусор
+                    clean_links = [
+                        l.strip()
+                        for l in raw_links
+                        if l
+                        and l.strip()
+                        and l.strip().lower() not in ("nan", "none")
+                    ]
+
                     st.session_state.links_final = clean_links
+
                     if len(clean_links) > 0:
                         st.success(f"✅ Найдено ссылок: {len(clean_links)}")
+                        # Для наглядности можно посмотреть, какие именно ссылки нашлись
+                        with st.expander("Показать найденные ссылки"):
+                            for i, link in enumerate(clean_links, start=1):
+                                st.write(f"{i}. {link}")
                     else:
-                        st.warning("Колонка найдена, но она пустая.")
-                else: 
+                        st.warning("Колонка найдена, но она пустая после очистки.")
+                else:
                     st.error("Не нашел колонок, похожих на ссылки.")
-            except Exception as e: 
+            except Exception as e:
                 st.error(f"Ошибка файла: {e}")
-    
+
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown('<div class="description" style="margin-bottom:10px;">Источник макета</div>', unsafe_allow_html=True)
     st.markdown('<div class="section-title" style="margin-top:0;">Загрузите дизайн</div>', unsafe_allow_html=True)
     uploaded_pdf = st.file_uploader("PDF", type=["pdf"], key="pdf", label_visibility="collapsed")
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # КНОПКИ
+    # --- КНОПКИ ГЕНЕРАЦИИ / СКАЧИВАНИЯ ---
     if "zip_result" not in st.session_state:
         st.session_state.zip_result = None
+        st.session_state.zip_name = None
 
     if st.session_state.zip_result is None:
         if st.button("Генерация"):
-            if not uploaded_pdf: st.toast("Нужен PDF!", icon="⚠️")
-            elif not st.session_state.links_final: st.toast("Нужны ссылки!", icon="⚠️")
+            if not uploaded_pdf:
+                st.toast("Нужен PDF!", icon="⚠️")
+            elif not st.session_state.links_final:
+                st.toast("Нужны ссылки!", icon="⚠️")
             else:
                 p_n = partner_name if partner_name else "partner"
                 s_n = size_name if size_name else "size"
-                res, errs = process_files(uploaded_pdf, st.session_state.links_final, p_n, s_n, auto_pos, x_mm, y_mm, size_mm)
-                
+
+                res, errs = process_files(
+                    uploaded_pdf,
+                    st.session_state.links_final,
+                    p_n,
+                    s_n,
+                    auto_pos,
+                    x_mm,
+                    y_mm,
+                    size_mm,
+                )
+
                 if res:
                     st.session_state.zip_result = res
                     st.session_state.zip_name = f"{p_n}_{s_n}.zip"
@@ -275,13 +330,20 @@ with col_right:
                     st.error("Ошибка. Проверьте ссылки.")
                     if errs:
                         with st.expander("Ошибки"):
-                            for e in errs: st.write(e)
+                            for e in errs:
+                                st.write(e)
     else:
         btn_col1, btn_col2 = st.columns(2, gap="small")
         with btn_col1:
-            st.download_button("Скачать архив", st.session_state.zip_result, st.session_state.zip_name, "application/zip")
+            st.download_button(
+                "Скачать архив",
+                st.session_state.zip_result,
+                st.session_state.zip_name or "qrs.zip",
+                "application/zip",
+            )
         with btn_col2:
             if st.button("Начать заново", type="secondary"):
                 st.session_state.zip_result = None
+                st.session_state.zip_name = None
                 st.session_state.links_final = []
                 st.rerun()
