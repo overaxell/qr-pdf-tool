@@ -239,7 +239,7 @@ def _detect_white_rectangles_raster(
         min_y = max_y = sy
 
         while stack:
-            x, y = stack.pop():
+            x, y = stack.pop()  # здесь был лишний двоеточие, теперь исправлено
 
             if x < min_x:
                 min_x = x
@@ -277,7 +277,7 @@ def _detect_white_rectangles_raster(
                 x_pt = x1 * page_w_pt / img_w
                 y_pt = y1 * page_h_pt / img_h
                 w_pt = w * page_w_pt / img_w
-                h_pt = h * page_h_pt / img_h  # исправлено: высота через page_h_pt
+                h_pt = h * page_h_pt / img_h
 
                 rects_pt.append((x_pt, y_pt, w_pt, h_pt))
 
@@ -665,5 +665,5 @@ with col_right:
             "application/zip",
         )
         st.caption(
-            "После нажатия дождитесь начала загрузки и не нажимайте кнопку несколько раз подряд."
+            "После нажатия дождитесь начала загрузки и не нажимайте\nкнопку несколько раз подряд."
         )
