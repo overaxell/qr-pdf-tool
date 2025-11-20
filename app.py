@@ -1,5 +1,5 @@
 import streamlit as st
-import pandas as pd  # можно пригодится дальше
+import pandas as pd
 import fitz  # PyMuPDF
 import io
 import zipfile
@@ -23,7 +23,7 @@ st.markdown("""
 <style>
     .stApp {background-color: #FFFFFF !important;}
 
-    /* ВАЖНО: span убран, чтобы не ломать иконки (keyboard_arrow_right и пр.) */
+    /* span не трогаем, чтобы не ломать иконки (keyboard_arrow_right и т.п.) */
     html, body, p, div, h1, h2, h3, h4, h5, h6, button, input, textarea, label, li, a {
         font-family: 'Manrope', sans-serif !important;
         color: #000000 !important;
@@ -137,8 +137,8 @@ def get_or_generate_qr_image(link: str):
 def detect_white_rectangles_in_pdf(
     pdf_bytes: bytes,
     white_threshold: int = 245,
-    min_area_ratio: float = 0.01,
-    max_area_ratio: float = 0.5,
+    min_area_ratio: float = 0.001,  # немного ниже, чтобы учитывать и небольшие квадраты
+    max_area_ratio: float = 0.9,
 ):
     """
     Ищет крупные почти белые квадратные области на первой странице PDF.
@@ -207,8 +207,9 @@ def detect_white_rectangles_in_pdf(
                     continue
 
                 aspect = w / h if h != 0 else 0
-                # почти квадрат
-                if aspect < 0.8 or aspect > 1.25:
+                # достаточно широкий диапазон, чтобы не отбрасывать квадрат,
+                # частично сливающийся с фоном
+                if aspect < 0.5 or aspect > 2.0:
                     continue
 
                 x_pt = x1 * page_w_pt / img_w
@@ -226,7 +227,8 @@ def detect_white_rectangles_in_pdf(
 def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
     """
     mode:
-        "white_rect" — вставлять в найденный белый квадрат с отступом 2 мм
+        "white_rect" — вставлять в найденный белый квадрат с отступом 2 мм,
+                       но только если min(сторон) >= 25 мм
         "center"     — центр страницы
         "manual"     — заданные координаты/размер
     """
@@ -241,14 +243,24 @@ def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
     white_rects = []
     if mode == "white_rect":
         try:
-            white_rects = detect_white_rectangles_in_pdf(pdf_bytes)
+            white_rects_raw = detect_white_rectangles_in_pdf(pdf_bytes)
+
+            # фильтрация по минимальной стороне в мм
+            min_size_mm = 25.0
+            white_rects = [
+                r
+                for r in white_rects_raw
+                if min(r[2], r[3]) / MM_TO_POINT >= min_size_mm
+            ]
+
             if not white_rects:
                 errors_log.append(
-                    "Авто-поиск белых квадратов: ничего не найдено, будет использован центр страницы."
+                    "Белый квадрат не найден или его сторона меньше 25 мм."
                 )
+                return None, errors_log
         except Exception as e:
             errors_log.append(f"Авто-поиск белых квадратов: ошибка {e}")
-            white_rects = []
+            return None, errors_log
 
     my_bar = st.progress(0, text="Начинаем обработку...")
 
@@ -266,7 +278,7 @@ def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
                         page_h = page.rect.height
 
                         if mode == "white_rect" and white_rects:
-                            # самый крупный белый квадрат
+                            # самый крупный подходящий белый квадрат
                             rx, ry, rw, rh = white_rects[0]
 
                             margin_pt = mm_to_pt(2.0)  # ОТСТУП 2 ММ
@@ -276,12 +288,13 @@ def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
                             qr_size_pt = min(inner_w, inner_h)
 
                             if qr_size_pt <= 0:
-                                qr_size_pt = page_w / 3
-                                x_pt = (page_w - qr_size_pt) / 2
-                                y_pt = (page_h - qr_size_pt) / 2
-                            else:
-                                x_pt = rx + margin_pt + (inner_w - qr_size_pt) / 2
-                                y_pt = ry + margin_pt + (inner_h - qr_size_pt) / 2
+                                errors_log.append(
+                                    "Подходящий квадрат найден, но внутренняя область слишком маленькая."
+                                )
+                                return None, errors_log
+
+                            x_pt = rx + margin_pt + (inner_w - qr_size_pt) / 2
+                            y_pt = ry + margin_pt + (inner_h - qr_size_pt) / 2
 
                         elif mode == "center":
                             qr_size_pt = page_w / 3
@@ -301,8 +314,8 @@ def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
                         )
                         page.insert_image(rect, stream=qr_bytes)
 
-                        # ВАЖНО: сохраняем как PDF без конвертации, чтобы не портить качество
-                        pdf_out = doc.tobytes()  # сохраняет структуру PDF, не растрирует
+                        # сохраняем как PDF без конвертации, чтобы не портить качество
+                        pdf_out = doc.tobytes()
                         zf.writestr(filename, pdf_out)
                         success_count += 1
                 else:
@@ -434,7 +447,10 @@ with col_left:
 
     if mode == "По белому квадрату":
         pos_mode = "white_rect"
-        st.info("QR будет вставлен в найденный на макете белый квадрат с отступом 2 мм.")
+        st.info(
+            "QR будет вставлен в найденный на макете белый квадрат с отступом 2 мм. "
+            "Если подходящий квадрат меньше 25 мм, коды не будут вставлены."
+        )
         x_mm = y_mm = size_mm = 0.0
     elif mode == "Центр страницы":
         pos_mode = "center"
@@ -511,15 +527,29 @@ with col_right:
         '<div class="section-title" style="margin-top:0;">Загрузите дизайн</div>',
         unsafe_allow_html=True,
     )
+
+    # --- ЗАГРУЗКА PDF И СБРОС СОСТОЯНИЯ ПРИ СМЕНЕ/УДАЛЕНИИ ---
     uploaded_pdf = st.file_uploader(
         "PDF", type=["pdf"], key="pdf", label_visibility="collapsed"
     )
+
+    if "prev_pdf_name" not in st.session_state:
+        st.session_state.prev_pdf_name = None
+
+    current_pdf_name = uploaded_pdf.name if uploaded_pdf is not None else None
+    if current_pdf_name != st.session_state.prev_pdf_name:
+        # файл изменился или был удалён — сбрасываем результат генерации
+        st.session_state.prev_pdf_name = current_pdf_name
+        st.session_state.zip_result = None
+        st.session_state.zip_name = None
+
     st.markdown("<br>", unsafe_allow_html=True)
 
     if "zip_result" not in st.session_state:
         st.session_state.zip_result = None
         st.session_state.zip_name = None
 
+    # --- ЛОГИКА КНОПОК / СКАЧИВАНИЯ ---
     if st.session_state.zip_result is None:
         if st.button("Генерация"):
             if not uploaded_pdf:
@@ -546,22 +576,21 @@ with col_right:
                     st.session_state.zip_name = f"{p_n}_{s_n}.zip"
                     st.rerun()
                 else:
+                    # тост с первой ошибкой, в т.ч. про маленький квадрат
+                    if errs:
+                        st.toast(errs[0], icon="⚠️")
                     st.error("Ошибка. Проверьте ссылки или макет.")
                     if errs:
                         for e in errs:
                             st.write(e)
     else:
-        btn_col1, btn_col2 = st.columns(2, gap="small")
-        with btn_col1:
-            st.download_button(
-                "Скачать архив",
-                st.session_state.zip_result,
-                st.session_state.zip_name or "qrs.zip",
-                "application/zip",
-            )
-        with btn_col2:
-            if st.button("Начать заново", type="secondary"):
-                st.session_state.zip_result = None
-                st.session_state.zip_name = None
-                st.session_state.links_final = []
-                st.rerun()
+        # только кнопка скачивания + дисклеймер
+        st.download_button(
+            "Скачать архив",
+            st.session_state.zip_result,
+            st.session_state.zip_name or "qrs.zip",
+            "application/zip",
+        )
+        st.caption(
+            "После нажатия дождитесь начала загрузки и не нажимайте кнопку несколько раз подряд."
+        )
