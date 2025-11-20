@@ -1,7 +1,6 @@
 streamlit
 pandas
 numpy
-opencv-python
 pymupdf
 openpyxl
 qrcode
