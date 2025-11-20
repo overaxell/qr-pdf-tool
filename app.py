@@ -133,18 +133,16 @@ def get_or_generate_qr_image(link: str):
         return None
 
 
-# --- ПОИСК БЕЛЫХ КВАДРАТОВ БЕЗ OPENCV ---
-def detect_white_rectangles_in_pdf(
+# --- ВСПОМОГАТЕЛЬНЫЙ РАСТРОВЫЙ ДЕТЕКТОР ---
+def _detect_white_rectangles_raster(
     pdf_bytes: bytes,
     white_threshold: int = 245,
-    min_area_ratio: float = 0.001,  # немного ниже, чтобы учитывать и небольшие квадраты
+    min_area_ratio: float = 0.001,
     max_area_ratio: float = 0.9,
 ):
     """
-    Ищет крупные почти белые квадратные области на первой странице PDF.
-    Возвращает список прямоугольников в координатах PDF:
-    [(x_pt, y_pt, w_pt, h_pt), ...] — отсортированных по площади (по убыванию).
-    Все вычисления делаются на numpy, без opencv.
+    Поиск крупных белых областей по пикселям (fallback, если векторный анализ не дал результата).
+    Возвращает список (x_pt, y_pt, w_pt, h_pt) в координатах PDF.
     """
     rects_pt = []
 
@@ -157,10 +155,8 @@ def detect_white_rectangles_in_pdf(
         img_w, img_h = pix.width, pix.height
         img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(img_h, img_w, 3)
 
-    # яркость
     gray = img.mean(axis=2)
 
-    # белые пиксели
     mask = gray > white_threshold
     visited = np.zeros_like(mask, dtype=bool)
 
@@ -192,7 +188,6 @@ def detect_white_rectangles_in_pdf(
 
         return min_x, min_y, max_x, max_y
 
-    # поиск связных областей
     for y in range(img_h):
         for x in range(img_w):
             if mask[y, x] and not visited[y, x]:
@@ -202,13 +197,10 @@ def detect_white_rectangles_in_pdf(
                 h = y2 - y1 + 1
                 area = w * h
                 area_ratio = area / img_area
-
                 if area_ratio < min_area_ratio or area_ratio > max_area_ratio:
                     continue
 
                 aspect = w / h if h != 0 else 0
-                # достаточно широкий диапазон, чтобы не отбрасывать квадрат,
-                # частично сливающийся с фоном
                 if aspect < 0.5 or aspect > 2.0:
                     continue
 
@@ -221,6 +213,69 @@ def detect_white_rectangles_in_pdf(
 
     rects_pt.sort(key=lambda r: r[2] * r[3], reverse=True)
     return rects_pt
+
+
+# --- ОСНОВНОЙ ДЕТЕКТОР БЕЛЫХ КВАДРАТОВ ---
+def detect_white_rectangles_in_pdf(pdf_bytes: bytes):
+    """
+    1) Сначала пытается найти белые прямоугольные / скруглённые фигуры как
+       векторные элементы через page.get_drawings().
+    2) Если не получилось — fallback на растровый анализ.
+
+    Возвращает список (x_pt, y_pt, w_pt, h_pt) в координатах PDF.
+    """
+    rects_pt = []
+
+    with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+        page = doc[0]
+        page_rect = page.rect
+        page_w_pt = page_rect.width
+        page_h_pt = page_rect.height
+
+        drawings = page.get_drawings()
+
+        for d in drawings:
+            r = d.get("rect", None)
+            if r is None:
+                continue
+
+            # цвет заливки (fill) или stroke (color) — берём любой доступный
+            fill = d.get("fill", None)
+            if fill is None:
+                fill = d.get("color", None)
+            if fill is None:
+                continue
+
+            # fill: (r,g,b) в 0..1
+            fr, fg, fb = fill
+            if fr < 0.95 or fg < 0.95 or fb < 0.95:
+                continue  # не белое
+
+            w_pt = r.width
+            h_pt = r.height
+            if w_pt <= 0 or h_pt <= 0:
+                continue
+
+            area = w_pt * h_pt
+            area_ratio = area / (page_w_pt * page_h_pt)
+
+            # отсечь совсем микроскопические и почти полноэкранные фигуры
+            if area_ratio < 0.001 or area_ratio > 0.6:
+                continue
+
+            aspect = w_pt / h_pt if h_pt != 0 else 0
+            if aspect < 0.5 or aspect > 2.0:
+                continue
+
+            rects_pt.append((r.x0, r.y0, w_pt, h_pt))
+
+    # если векторный анализ что-то нашёл — используем его
+    if rects_pt:
+        rects_pt.sort(key=lambda r: r[2] * r[3], reverse=True)
+        return rects_pt
+
+    # иначе — fallback на растровый детектор
+    return _detect_white_rectangles_raster(pdf_bytes)
 
 
 # --- ОБРАБОТКА PDF ---
@@ -245,7 +300,6 @@ def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
         try:
             white_rects_raw = detect_white_rectangles_in_pdf(pdf_bytes)
 
-            # фильтрация по минимальной стороне в мм
             min_size_mm = 25.0
             white_rects = [
                 r
@@ -576,7 +630,6 @@ with col_right:
                     st.session_state.zip_name = f"{p_n}_{s_n}.zip"
                     st.rerun()
                 else:
-                    # тост с первой ошибкой, в т.ч. про маленький квадрат
                     if errs:
                         st.toast(errs[0], icon="⚠️")
                     st.error("Ошибка. Проверьте ссылки или макет.")
@@ -584,7 +637,6 @@ with col_right:
                         for e in errs:
                             st.write(e)
     else:
-        # только кнопка скачивания + дисклеймер
         st.download_button(
             "Скачать архив",
             st.session_state.zip_result,
