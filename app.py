@@ -17,7 +17,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- CSS СТИЛИ ---
+# --- CSS СТИЛИ + АНИМАЦИИ ---
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;800&display=swap" rel="stylesheet">
 <style>
@@ -29,6 +29,21 @@ st.markdown("""
         color: #000000 !important;
     }
 
+    /* АНИМАЦИИ */
+    @keyframes fadeUp {
+        0% {opacity: 0; transform: translateY(8px);}
+        100% {opacity: 1; transform: translateY(0);}
+    }
+    @keyframes fadeInSoft {
+        0% {opacity: 0;}
+        100% {opacity: 1;}
+    }
+    @keyframes pulseSoft {
+        0%   {transform: scale(1);}
+        50%  {transform: scale(1.02);}
+        100% {transform: scale(1);}
+    }
+
     .big-title {
         font-size: 96px !important;
         font-weight: 800 !important;
@@ -36,6 +51,7 @@ st.markdown("""
         letter-spacing: -3px !important;
         margin-bottom: 20px !important;
         display: block !important;
+        animation: fadeUp 0.6s ease-out both;
     }
     .description {
         font-size: 18px !important;
@@ -44,6 +60,8 @@ st.markdown("""
         margin-bottom: 18px !important;
         max-width: 650px;
         display: block !important;
+        animation: fadeInSoft 0.6s ease-out both;
+        animation-delay: 0.1s;
     }
     .section-title {
         font-size: 32px !important;
@@ -51,21 +69,30 @@ st.markdown("""
         margin-top: 24px !important;
     }
     header, footer, #MainMenu {visibility: hidden;}
-    .block-container {padding-top: 1.5rem !important; padding-bottom: 4rem !important;}
+    .block-container {
+        padding-top: 1.5rem !important;
+        padding-bottom: 4rem !important;
+        animation: fadeInSoft 0.4s ease-out;
+    }
 
     div[data-baseweb="input"] > div {
         border-radius: 14px !important;
         border: 1px solid #E0E0E0 !important;
         background-color: #FFFFFF !important;
+        transition: border-color 0.18s ease-out, box-shadow 0.18s ease-out, transform 0.1s ease-out;
     }
-    div[data-baseweb="input"] > div:focus-within {border-color: #000 !important;}
+    div[data-baseweb="input"] > div:focus-within {
+        border-color: #000 !important;
+        box-shadow: 0 0 0 1px #00000010;
+        transform: translateY(-1px);
+    }
 
     div.stButton, div.stDownloadButton {
         width: 100% !important;
         display: block !important;
     }
 
-    /* Обычные кнопки (например, Генерация) — чёрные */
+    /* Обычные кнопки (например, Генерация) — чёрные с микроанимацией */
     div.stButton > button {
         width: 100% !important;
         min-width: 300px !important;
@@ -80,12 +107,22 @@ st.markdown("""
         justify-content: center !important;
         align-items: center !important;
         white-space: nowrap !important;
+        transition: background-color 0.18s ease-out,
+                    transform 0.12s ease-out,
+                    box-shadow 0.18s ease-out;
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
     }
     div.stButton > button:hover {
         background-color: #333333 !important;
+        transform: translateY(-1px) scale(1.01);
+        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
+    }
+    div.stButton > button:active {
+        transform: translateY(0) scale(0.99);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.10);
     }
 
-    /* Кнопка скачивания — маджента #f0047f */
+    /* Кнопка скачивания — маджента + пульс, когда видна */
     div.stDownloadButton > button {
         width: 100% !important;
         min-width: 300px !important;
@@ -100,12 +137,26 @@ st.markdown("""
         justify-content: center !important;
         align-items: center !important;
         white-space: nowrap !important;
+        box-shadow: 0 8px 18px rgba(240, 4, 127, 0.4);
+        transition: background-color 0.18s ease-out,
+                    transform 0.12s ease-out,
+                    box-shadow 0.18s ease-out;
+        animation: pulseSoft 1.6s ease-in-out infinite;
     }
     div.stDownloadButton > button:hover {
         background-color: #c00367 !important;
+        transform: translateY(-1px) scale(1.01);
+        box-shadow: 0 12px 26px rgba(240, 4, 127, 0.5);
+    }
+    div.stDownloadButton > button:active {
+        transform: translateY(0) scale(0.99);
+        box-shadow: 0 6px 14px rgba(240, 4, 127, 0.4);
     }
 
-    div.stButton > button p, div.stDownloadButton > button p {color: #FFFFFF !important;}
+    div.stButton > button p, div.stDownloadButton > button p {
+        color: #FFFFFF !important;
+        margin: 0;
+    }
 
     .stTabs [data-baseweb="tab-list"] {border-bottom: 2px solid #eee !important;}
     .stTabs [aria-selected="true"] {color: #000 !important; border-bottom: 2px solid #000 !important;}
@@ -188,7 +239,7 @@ def _detect_white_rectangles_raster(
         min_y = max_y = sy
 
         while stack:
-            x, y = stack.pop()
+            x, y = stack.pop():
 
             if x < min_x:
                 min_x = x
@@ -226,7 +277,7 @@ def _detect_white_rectangles_raster(
                 x_pt = x1 * page_w_pt / img_w
                 y_pt = y1 * page_h_pt / img_h
                 w_pt = w * page_w_pt / img_w
-                h_pt = h * page_w_pt / img_h
+                h_pt = h * page_h_pt / img_h  # исправлено: высота через page_h_pt
 
                 rects_pt.append((x_pt, y_pt, w_pt, h_pt))
 
@@ -323,8 +374,6 @@ def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
                 if qr_bytes:
                     with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
                         page = doc[0]
-                        page_w = page.rect.width
-                        page_h = page.rect.height
 
                         if mode == "white_rect" and white_rects:
                             rx, ry, rw, rh = white_rects[0]
