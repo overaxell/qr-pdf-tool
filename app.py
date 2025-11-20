@@ -75,16 +75,39 @@ st.markdown("""
         animation: fadeInSoft 0.4s ease-out;
     }
 
-    div[data-baseweb="input"] > div {
+    /* Базовый контейнер инпутов – одна рамка для text_input и number_input */
+    div[data-baseweb="input"] {
         border-radius: 14px !important;
         border: 1px solid #E0E0E0 !important;
         background-color: #FFFFFF !important;
+        box-shadow: none !important;
+        overflow: hidden !important;
         transition: border-color 0.18s ease-out, box-shadow 0.18s ease-out, transform 0.1s ease-out;
     }
-    div[data-baseweb="input"] > div:focus-within {
-        border-color: #000 !important;
+    div[data-baseweb="input"]:focus-within {
+        border-color: #000000 !important;
         box-shadow: 0 0 0 1px #00000010;
         transform: translateY(-1px);
+    }
+
+    /* Внутренние обёртки без рамок и теней */
+    div[data-baseweb="input"] > div {
+        border: none !important;
+        box-shadow: none !important;
+        background-color: transparent !important;
+    }
+    /* Сам input */
+    div[data-baseweb="input"] input {
+        border: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+        background-color: transparent !important;
+    }
+    /* Кнопки +/- у number_input без собственной рамки */
+    div[data-baseweb="input"] button {
+        border: none !important;
+        box-shadow: none !important;
+        background-color: #F5F5F5 !important;
     }
 
     div.stButton, div.stDownloadButton {
@@ -239,7 +262,7 @@ def _detect_white_rectangles_raster(
         min_y = max_y = sy
 
         while stack:
-            x, y = stack.pop()  # здесь был лишний двоеточие, теперь исправлено
+            x, y = stack.pop()
 
             if x < min_x:
                 min_x = x
