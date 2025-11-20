@@ -1,7 +1,9 @@
 streamlit
 pandas
+numpy
+opencv-python
 pymupdf
 openpyxl
-requests
-Pillow
 qrcode
+Pillow
+requests
