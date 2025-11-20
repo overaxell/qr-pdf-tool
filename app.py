@@ -34,24 +34,24 @@ st.markdown("""
         font-weight: 800 !important;
         line-height: 1.0 !important;
         letter-spacing: -3px !important;
-        margin-bottom: 25px !important;
+        margin-bottom: 20px !important;
         display: block !important;
     }
     .description {
         font-size: 18px !important;
         color: #666 !important;
         line-height: 1.5 !important;
-        margin-bottom: 20px !important;
+        margin-bottom: 18px !important;
         max-width: 650px;
         display: block !important;
     }
     .section-title {
         font-size: 32px !important;
         font-weight: 600 !important;
-        margin-top: 30px !important;
+        margin-top: 24px !important;
     }
     header, footer, #MainMenu {visibility: hidden;}
-    .block-container {padding-top: 2rem !important; padding-bottom: 5rem !important;}
+    .block-container {padding-top: 1.5rem !important; padding-bottom: 4rem !important;}
 
     div[data-baseweb="input"] > div {
         border-radius: 14px !important;
@@ -64,7 +64,9 @@ st.markdown("""
         width: 100% !important;
         display: block !important;
     }
-    div.stButton > button, div.stDownloadButton > button {
+
+    /* Обычные кнопки (например, Генерация) — чёрные */
+    div.stButton > button {
         width: 100% !important;
         min-width: 300px !important;
         background-color: #000000 !important;
@@ -79,13 +81,36 @@ st.markdown("""
         align-items: center !important;
         white-space: nowrap !important;
     }
-    div.stButton > button:hover, div.stDownloadButton > button:hover {background-color: #333333 !important;}
+    div.stButton > button:hover {
+        background-color: #333333 !important;
+    }
+
+    /* Кнопка скачивания — маджента #f0047f */
+    div.stDownloadButton > button {
+        width: 100% !important;
+        min-width: 300px !important;
+        background-color: #f0047f !important;
+        color: #FFFFFF !important;
+        border-radius: 14px !important;
+        padding: 18px 40px !important;
+        font-size: 18px !important;
+        font-weight: 500 !important;
+        border: none !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        white-space: nowrap !important;
+    }
+    div.stDownloadButton > button:hover {
+        background-color: #c00367 !important;
+    }
+
     div.stButton > button p, div.stDownloadButton > button p {color: #FFFFFF !important;}
 
     .stTabs [data-baseweb="tab-list"] {border-bottom: 2px solid #eee !important;}
     .stTabs [aria-selected="true"] {color: #000 !important; border-bottom: 2px solid #000 !important;}
 
-    hr {border-color: #eee !important; margin: 40px 0 !important;}
+    hr {border-color: #eee !important; margin: 24px 0 !important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -106,7 +131,6 @@ def get_or_generate_qr_image(link: str):
     if not link:
         return None
 
-    # пробуем скачать как готовую картинку
     try:
         download_url = link
         if not download_url.startswith("http"):
@@ -120,7 +144,6 @@ def get_or_generate_qr_image(link: str):
     except Exception:
         pass
 
-    # иначе генерируем QR по ссылке
     try:
         qr = qrcode.QRCode(box_size=10, border=0)
         qr.add_data(link)
@@ -140,10 +163,6 @@ def _detect_white_rectangles_raster(
     min_area_ratio: float = 0.001,
     max_area_ratio: float = 0.9,
 ):
-    """
-    Поиск крупных белых областей по пикселям (fallback, если векторный анализ не дал результата).
-    Возвращает список (x_pt, y_pt, w_pt, h_pt) в координатах PDF.
-    """
     rects_pt = []
 
     with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
@@ -207,7 +226,7 @@ def _detect_white_rectangles_raster(
                 x_pt = x1 * page_w_pt / img_w
                 y_pt = y1 * page_h_pt / img_h
                 w_pt = w * page_w_pt / img_w
-                h_pt = h * page_h_pt / img_h
+                h_pt = h * page_w_pt / img_h
 
                 rects_pt.append((x_pt, y_pt, w_pt, h_pt))
 
@@ -217,13 +236,6 @@ def _detect_white_rectangles_raster(
 
 # --- ОСНОВНОЙ ДЕТЕКТОР БЕЛЫХ КВАДРАТОВ ---
 def detect_white_rectangles_in_pdf(pdf_bytes: bytes):
-    """
-    1) Сначала пытается найти белые прямоугольные / скруглённые фигуры как
-       векторные элементы через page.get_drawings().
-    2) Если не получилось — fallback на растровый анализ.
-
-    Возвращает список (x_pt, y_pt, w_pt, h_pt) в координатах PDF.
-    """
     rects_pt = []
 
     with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
@@ -239,17 +251,15 @@ def detect_white_rectangles_in_pdf(pdf_bytes: bytes):
             if r is None:
                 continue
 
-            # цвет заливки (fill) или stroke (color) — берём любой доступный
             fill = d.get("fill", None)
             if fill is None:
                 fill = d.get("color", None)
             if fill is None:
                 continue
 
-            # fill: (r,g,b) в 0..1
             fr, fg, fb = fill
             if fr < 0.95 or fg < 0.95 or fb < 0.95:
-                continue  # не белое
+                continue
 
             w_pt = r.width
             h_pt = r.height
@@ -258,8 +268,6 @@ def detect_white_rectangles_in_pdf(pdf_bytes: bytes):
 
             area = w_pt * h_pt
             area_ratio = area / (page_w_pt * page_h_pt)
-
-            # отсечь совсем микроскопические и почти полноэкранные фигуры
             if area_ratio < 0.001 or area_ratio > 0.6:
                 continue
 
@@ -278,12 +286,6 @@ def detect_white_rectangles_in_pdf(pdf_bytes: bytes):
 
 # --- ОБРАБОТКА PDF ---
 def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
-    """
-    mode:
-        "white_rect" — вставлять в найденный белый квадрат с отступом 2 мм,
-                       но только если min(сторон) >= 25 мм
-        "manual"     — заданные координаты/размер
-    """
     zip_buffer = io.BytesIO()
     pdf_file.seek(0)
     pdf_bytes = pdf_file.read()
@@ -291,19 +293,15 @@ def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
     errors_log = []
     total_links = len(links)
 
-    # заранее ищем белые квадраты, если нужно
     white_rects = []
     if mode == "white_rect":
         try:
             white_rects_raw = detect_white_rectangles_in_pdf(pdf_bytes)
-
             min_size_mm = 25.0
             white_rects = [
-                r
-                for r in white_rects_raw
+                r for r in white_rects_raw
                 if min(r[2], r[3]) / MM_TO_POINT >= min_size_mm
             ]
-
             if not white_rects:
                 errors_log.append(
                     "Белый квадрат не найден или его сторона меньше 25 мм."
@@ -329,11 +327,8 @@ def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
                         page_h = page.rect.height
 
                         if mode == "white_rect" and white_rects:
-                            # самый крупный подходящий белый квадрат
                             rx, ry, rw, rh = white_rects[0]
-
-                            margin_pt = mm_to_pt(2.0)  # ОТСТУП 2 ММ
-
+                            margin_pt = mm_to_pt(2.0)
                             inner_w = rw - 2 * margin_pt
                             inner_h = rh - 2 * margin_pt
                             qr_size_pt = min(inner_w, inner_h)
@@ -346,21 +341,16 @@ def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
 
                             x_pt = rx + margin_pt + (inner_w - qr_size_pt) / 2
                             y_pt = ry + margin_pt + (inner_h - qr_size_pt) / 2
-
-                        else:  # "manual"
+                        else:
                             x_pt = mm_to_pt(x_mm)
                             y_pt = mm_to_pt(y_mm)
                             qr_size_pt = mm_to_pt(size_mm)
 
                         rect = fitz.Rect(
-                            x_pt,
-                            y_pt,
-                            x_pt + qr_size_pt,
-                            y_pt + qr_size_pt,
+                            x_pt, y_pt, x_pt + qr_size_pt, y_pt + qr_size_pt
                         )
                         page.insert_image(rect, stream=qr_bytes)
 
-                        # сохраняем как PDF без конвертации, чтобы не портить качество
                         pdf_out = doc.tobytes()
                         zf.writestr(filename, pdf_out)
                         success_count += 1
@@ -381,12 +371,6 @@ def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
 
 # --- ЧТЕНИЕ ССЫЛОК ИЗ EXCEL ---
 def extract_links_from_excel(file) -> list:
-    """
-    Читает Excel, учитывая:
-    - значения ячеек;
-    - реальные гиперссылки (cell.hyperlink.target).
-    Находит колонку с максимальным количеством URL и возвращает все ссылки из неё.
-    """
     file_bytes = file.read()
     bio = io.BytesIO(file_bytes)
 
@@ -513,7 +497,7 @@ with col_right:
     st.write("")
     st.write("")
     st.markdown(
-        '<div class="description" style="margin-bottom:0;">Источник ссылок QR</div>',
+        '<div class="description" style="margin-bottom:10px;">Источник ссылок QR</div>',
         unsafe_allow_html=True,
     )
 
@@ -522,7 +506,6 @@ with col_right:
 
     tab_manual, tab_excel = st.tabs(["Вручную", "Из excel"])
 
-    # вручную
     with tab_manual:
         st.write("")
         manual_text = st.text_area(
@@ -536,7 +519,6 @@ with col_right:
                 l.strip() for l in manual_text.split("\n") if l.strip()
             ]
 
-    # из excel
     with tab_excel:
         st.write("")
         uploaded_excel = st.file_uploader(
@@ -573,7 +555,6 @@ with col_right:
         unsafe_allow_html=True,
     )
 
-    # --- ЗАГРУЗКА PDF И СБРОС СОСТОЯНИЯ ПРИ СМЕНЕ/УДАЛЕНИИ ---
     uploaded_pdf = st.file_uploader(
         "PDF", type=["pdf"], key="pdf", label_visibility="collapsed"
     )
@@ -583,7 +564,6 @@ with col_right:
 
     current_pdf_name = uploaded_pdf.name if uploaded_pdf is not None else None
     if current_pdf_name != st.session_state.prev_pdf_name:
-        # файл изменился или был удалён — сбрасываем результат генерации
         st.session_state.prev_pdf_name = current_pdf_name
         st.session_state.zip_result = None
         st.session_state.zip_name = None
@@ -594,7 +574,6 @@ with col_right:
         st.session_state.zip_result = None
         st.session_state.zip_name = None
 
-    # --- ЛОГИКА КНОПОК / СКАЧИВАНИЯ ---
     if st.session_state.zip_result is None:
         if st.button("Генерация"):
             if not uploaded_pdf:
