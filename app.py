@@ -269,12 +269,10 @@ def detect_white_rectangles_in_pdf(pdf_bytes: bytes):
 
             rects_pt.append((r.x0, r.y0, w_pt, h_pt))
 
-    # если векторный анализ что-то нашёл — используем его
     if rects_pt:
         rects_pt.sort(key=lambda r: r[2] * r[3], reverse=True)
         return rects_pt
 
-    # иначе — fallback на растровый детектор
     return _detect_white_rectangles_raster(pdf_bytes)
 
 
@@ -284,7 +282,6 @@ def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
     mode:
         "white_rect" — вставлять в найденный белый квадрат с отступом 2 мм,
                        но только если min(сторон) >= 25 мм
-        "center"     — центр страницы
         "manual"     — заданные координаты/размер
     """
     zip_buffer = io.BytesIO()
@@ -313,7 +310,7 @@ def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
                 )
                 return None, errors_log
         except Exception as e:
-            errors_log.append(f"Авто-поиск белых квадратов: ошибка {e}")
+            errors_log.append(f"Автообнаружение: ошибка {e}")
             return None, errors_log
 
     my_bar = st.progress(0, text="Начинаем обработку...")
@@ -349,11 +346,6 @@ def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
 
                             x_pt = rx + margin_pt + (inner_w - qr_size_pt) / 2
                             y_pt = ry + margin_pt + (inner_h - qr_size_pt) / 2
-
-                        elif mode == "center":
-                            qr_size_pt = page_w / 3
-                            x_pt = (page_w - qr_size_pt) / 2
-                            y_pt = (page_h - qr_size_pt) / 2
 
                         else:  # "manual"
                             x_pt = mm_to_pt(x_mm)
@@ -485,7 +477,7 @@ with col_left:
     with c1:
         partner_name = st.text_input("Имя партнера", placeholder="Partner")
     with c2:
-        size_name = st.text_input("Размер файла", placeholder="7x7")
+        size_name = st.text_input("Размер файла", placeholder="0x0")
 
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown(
@@ -495,20 +487,16 @@ with col_left:
 
     mode = st.radio(
         "Режим позиционирования QR",
-        ["По белому квадрату", "Центр страницы", "Ручной"],
+        ["Автообнаружение", "Ручная настройка координат"],
         index=0,
     )
 
-    if mode == "По белому квадрату":
+    if mode == "Автообнаружение":
         pos_mode = "white_rect"
         st.info(
             "QR будет вставлен в найденный на макете белый квадрат с отступом 2 мм. "
             "Если подходящий квадрат меньше 25 мм, коды не будут вставлены."
         )
-        x_mm = y_mm = size_mm = 0.0
-    elif mode == "Центр страницы":
-        pos_mode = "center"
-        st.info("QR будет по центру страницы (1/3 ширины).")
         x_mm = y_mm = size_mm = 0.0
     else:
         pos_mode = "manual"
@@ -538,7 +526,10 @@ with col_right:
     with tab_manual:
         st.write("")
         manual_text = st.text_area(
-            "Ссылки списком", height=150, label_visibility="collapsed"
+            "Ссылки списком",
+            height=150,
+            label_visibility="collapsed",
+            placeholder="https://",
         )
         if manual_text:
             st.session_state.links_final = [
@@ -610,9 +601,11 @@ with col_right:
                 st.toast("Нужен PDF!", icon="⚠️")
             elif not st.session_state.links_final:
                 st.toast("Нужны ссылки!", icon="⚠️")
+            elif not partner_name.strip() or not size_name.strip():
+                st.toast("Сначала задайте имя партнера и размер файла.", icon="⚠️")
             else:
-                p_n = partner_name if partner_name else "partner"
-                s_n = size_name if size_name else "size"
+                p_n = partner_name.strip()
+                s_n = size_name.strip()
 
                 res, errs = process_files(
                     uploaded_pdf,
