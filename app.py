@@ -1,11 +1,12 @@
 import streamlit as st
-import pandas as pd
+import pandas as pd  # можно оставить, если пригодится дальше
 import fitz  # PyMuPDF
 import io
 import zipfile
 import requests
 import qrcode
 from PIL import Image
+from openpyxl import load_workbook  # НОВОЕ: для корректного чтения гиперссылок
 
 # --- КОНФИГУРАЦИЯ СТРАНИЦЫ ---
 st.set_page_config(
@@ -50,7 +51,11 @@ st.markdown("""
     .block-container {padding-top: 2rem !important; padding-bottom: 5rem !important;}
 
     /* ИНПУТЫ */
-    div[data-baseweb="input"] > div {border-radius: 14px !important; border: 1px solid #E0E0E0 !important; background-color: #FFFFFF !important;}
+    div[data-baseweb="input"] > div {
+        border-radius: 14px !important;
+        border: 1px solid #E0E0E0 !important;
+        background-color: #FFFFFF !important;
+    }
     div[data-baseweb="input"] > div:focus-within {border-color: #000 !important;}
     
     /* КНОПКИ */
@@ -114,7 +119,7 @@ def get_or_generate_qr_image(link: str):
     except Exception:
         pass
 
-    # 2) Иначе генерируем QR по ссылке
+    # 2) Если это не картинка — генерируем QR по самой ссылке
     try:
         qr = qrcode.QRCode(box_size=10, border=0)
         qr.add_data(link)
@@ -174,6 +179,92 @@ def process_files(pdf_file, links, p_name, p_size, auto_center, x_mm, y_mm, size
     if success_count == 0:
         return None, errors_log
     return zip_buffer, errors_log
+
+
+def extract_links_from_excel(file) -> list:
+    """
+    Чтение Excel с учётом:
+    - значений ячеек
+    - реальных гиперссылок (cell.hyperlink.target)
+    Возвращает список ссылок из наиболее "похожей" на ссылки колонки.
+    """
+    # Стримлит может много раз читать один и тот же объект, поэтому сначала в память:
+    file_bytes = file.read()
+    bio = io.BytesIO(file_bytes)
+
+    wb = load_workbook(bio, data_only=True)
+    ws = wb.active
+
+    # Собираем данные по всем колонкам: list[list[str]]
+    all_columns = []
+    max_col = ws.max_column
+    max_row = ws.max_row
+
+    for col_idx in range(1, max_col + 1):
+        col_values = []
+        for row_idx in range(1, max_row + 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+
+            text = ""
+
+            # Если у ячейки есть гиперссылка — приоритетно берём её
+            if cell.hyperlink and cell.hyperlink.target:
+                text = str(cell.hyperlink.target).strip()
+            else:
+                val = cell.value
+                if val is None:
+                    text = ""
+                else:
+                    text = str(val).strip()
+
+            col_values.append(text)
+        all_columns.append(col_values)
+
+    # Функция, определяющая, "похожа ли строка на ссылку"
+    import re
+
+    def is_url_like(s: str) -> bool:
+        s = s.strip()
+        if len(s) <= 5:
+            return False
+        # Простейшая эвристика
+        return bool(re.search(r'http|www|\.[a-zA-Z]{2,}', s))
+
+    # Находим колонку с максимальным количеством "похожих на ссылки" значений (кроме, возможно, первой строки)
+    best_idx = None
+    best_score = 0
+
+    for idx, col_vals in enumerate(all_columns):
+        if not col_vals:
+            continue
+        # Считаем по всем строкам, но можно игнорировать первую, если это заголовок
+        score = sum(1 for v in col_vals if is_url_like(v))
+        if score > best_score:
+            best_score = score
+            best_idx = idx
+
+    if best_idx is None or best_score == 0:
+        # Ни одна колонка не похожа на колонку со ссылками
+        return []
+
+    col_vals = all_columns[best_idx]
+
+    # Если в первой строке нет ссылок, считаем её заголовком и пропускаем
+    if col_vals and not is_url_like(col_vals[0]):
+        data_vals = col_vals[1:]
+    else:
+        data_vals = col_vals
+
+    # Финальная очистка
+    clean_links = [
+        v.strip()
+        for v in data_vals
+        if v
+        and v.strip()
+        and v.strip().lower() not in ("nan", "none")
+    ]
+
+    return clean_links
 
 
 # --- ВЕРСТКА ---
@@ -238,55 +329,25 @@ with col_right:
                 if l.strip()
             ]
 
-    # --- ВКЛАДКА "ИЗ EXCEL" (ИСПРАВЛЕННАЯ) ---
+    # --- ВКЛАДКА "ИЗ EXCEL" (ЧТЕНИЕ ЗНАЧЕНИЙ + ГИПЕРССЫЛОК) ---
     with tab_excel:
         st.write("")
         uploaded_excel = st.file_uploader("Excel", type=["xlsx"], key="xls", label_visibility="collapsed")
         if uploaded_excel:
             try:
-                # Читаем всё как строки, не превращая автоматически в NaN
-                df = pd.read_excel(uploaded_excel, dtype=str, keep_default_na=False)
+                # ВАЖНО: нужно перемотать файловый объект, так как Streamlit может его переиспользовать
+                uploaded_excel.seek(0)
+                links_from_excel = extract_links_from_excel(uploaded_excel)
 
-                best_col = None
-                max_score = 0
+                st.session_state.links_final = links_from_excel
 
-                # Ищем колонку, которая больше всего похожа на колонку со ссылками
-                for col in df.columns:
-                    series = df[col].fillna("").astype(str).str.strip()
-
-                    score = series[
-                        (series.str.len() > 5) &
-                        (series.str.contains(r'http|www|\.', regex=True, case=False))
-                    ].count()
-
-                    if score > max_score:
-                        max_score = score
-                        best_col = col
-
-                if best_col:
-                    raw_links = df[best_col].fillna("").astype(str).tolist()
-
-                    # Чистим список ссылок: убираем пустое и явный мусор
-                    clean_links = [
-                        l.strip()
-                        for l in raw_links
-                        if l
-                        and l.strip()
-                        and l.strip().lower() not in ("nan", "none")
-                    ]
-
-                    st.session_state.links_final = clean_links
-
-                    if len(clean_links) > 0:
-                        st.success(f"✅ Найдено ссылок: {len(clean_links)}")
-                        # Для наглядности можно посмотреть, какие именно ссылки нашлись
-                        with st.expander("Показать найденные ссылки"):
-                            for i, link in enumerate(clean_links, start=1):
-                                st.write(f"{i}. {link}")
-                    else:
-                        st.warning("Колонка найдена, но она пустая после очистки.")
+                if len(links_from_excel) > 0:
+                    st.success(f"✅ Найдено ссылок: {len(links_from_excel)}")
+                    with st.expander("Показать найденные ссылки"):
+                        for i, link in enumerate(links_from_excel, start=1):
+                            st.write(f"{i}. {link!r}")
                 else:
-                    st.error("Не нашел колонок, похожих на ссылки.")
+                    st.warning("Не удалось найти ссылки в файле. Проверьте, что в колонке есть URL или гиперссылки.")
             except Exception as e:
                 st.error(f"Ошибка файла: {e}")
 
