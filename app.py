@@ -75,14 +75,16 @@ st.markdown("""
         animation: fadeInSoft 0.4s ease-out;
     }
 
-    /* Базовый контейнер инпутов – одна рамка для text_input и number_input */
+    /* === ЕДИНАЯ РАМКА ДЛЯ ВСЕХ INPUT/NUMBER_INPUT === */
     div[data-baseweb="input"] {
         border-radius: 14px !important;
         border: 1px solid #E0E0E0 !important;
         background-color: #FFFFFF !important;
         box-shadow: none !important;
         overflow: hidden !important;
-        transition: border-color 0.18s ease-out, box-shadow 0.18s ease-out, transform 0.1s ease-out;
+        transition: border-color 0.18s ease-out,
+                    box-shadow 0.18s ease-out,
+                    transform 0.10s ease-out;
     }
     div[data-baseweb="input"]:focus-within {
         border-color: #000000 !important;
@@ -90,24 +92,26 @@ st.markdown("""
         transform: translateY(-1px);
     }
 
-    /* Внутренние обёртки без рамок и теней */
-    div[data-baseweb="input"] > div {
-        border: none !important;
-        box-shadow: none !important;
-        background-color: transparent !important;
-    }
-    /* Сам input */
-    div[data-baseweb="input"] input {
+    /* Убираем любые внутренние рамки и тени (в том числе у number_input) */
+    div[data-baseweb="input"] * {
         border: none !important;
         box-shadow: none !important;
         outline: none !important;
+    }
+
+    /* Само текстовое поле */
+    div[data-baseweb="input"] input {
         background-color: transparent !important;
     }
-    /* Кнопки +/- у number_input без собственной рамки */
+
+    /* Кнопки +/- у number_input */
     div[data-baseweb="input"] button {
-        border: none !important;
-        box-shadow: none !important;
         background-color: #F5F5F5 !important;
+        color: #000000 !important;
+    }
+    div[data-baseweb="input"] button:hover {
+        background-color: #E0E0E0 !important;
+        color: #000000 !important;
     }
 
     div.stButton, div.stDownloadButton {
