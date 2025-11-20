@@ -22,10 +22,13 @@ st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;800&display=swap" rel="stylesheet">
 <style>
     .stApp {background-color: #FFFFFF !important;}
-    html, body, p, div, span, h1, h2, h3, h4, h5, h6, button, input, textarea, label, li, a {
+
+    /* ВАЖНО: span убран, чтобы не ломать иконки (keyboard_arrow_right и пр.) */
+    html, body, p, div, h1, h2, h3, h4, h5, h6, button, input, textarea, label, li, a {
         font-family: 'Manrope', sans-serif !important;
         color: #000000 !important;
     }
+
     .big-title {
         font-size: 96px !important;
         font-weight: 800 !important;
@@ -189,7 +192,7 @@ def detect_white_rectangles_in_pdf(
 
         return min_x, min_y, max_x, max_y
 
-    # простой поиск связных областей
+    # поиск связных областей
     for y in range(img_h):
         for x in range(img_w):
             if mask[y, x] and not visited[y, x]:
@@ -223,7 +226,7 @@ def detect_white_rectangles_in_pdf(
 def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
     """
     mode:
-        "white_rect" — вставлять в найденный белый квадрат с отступом 1 мм
+        "white_rect" — вставлять в найденный белый квадрат с отступом 2 мм
         "center"     — центр страницы
         "manual"     — заданные координаты/размер
     """
@@ -266,7 +269,7 @@ def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
                             # самый крупный белый квадрат
                             rx, ry, rw, rh = white_rects[0]
 
-                            margin_pt = mm_to_pt(1.0)  # отступ 1 мм
+                            margin_pt = mm_to_pt(2.0)  # ОТСТУП 2 ММ
 
                             inner_w = rw - 2 * margin_pt
                             inner_h = rh - 2 * margin_pt
@@ -297,7 +300,10 @@ def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
                             y_pt + qr_size_pt,
                         )
                         page.insert_image(rect, stream=qr_bytes)
-                        zf.writestr(filename, doc.convert_to_pdf())
+
+                        # ВАЖНО: сохраняем как PDF без конвертации, чтобы не портить качество
+                        pdf_out = doc.tobytes()  # сохраняет структуру PDF, не растрирует
+                        zf.writestr(filename, pdf_out)
                         success_count += 1
                 else:
                     errors_log.append(
@@ -428,7 +434,7 @@ with col_left:
 
     if mode == "По белому квадрату":
         pos_mode = "white_rect"
-        st.info("QR будет вставлен в найденный на макете белый квадрат с отступом 1 мм.")
+        st.info("QR будет вставлен в найденный на макете белый квадрат с отступом 2 мм.")
         x_mm = y_mm = size_mm = 0.0
     elif mode == "Центр страницы":
         pos_mode = "center"
