@@ -43,6 +43,15 @@ st.markdown("""
         50%  {transform: scale(1.02);}
         100% {transform: scale(1);}
     }
+    /* typewriter для заголовка "Кюарыч" (7 символов) */
+    @keyframes typing {
+        from { width: 0; }
+        to   { width: 7ch; }
+    }
+    @keyframes blink-caret {
+        from, to { border-color: transparent; }
+        50% { border-color: #000000; }
+    }
 
     .big-title {
         font-size: 96px !important;
@@ -50,9 +59,16 @@ st.markdown("""
         line-height: 1.0 !important;
         letter-spacing: -3px !important;
         margin-bottom: 20px !important;
-        display: block !important;
-        animation: fadeUp 0.6s ease-out both;
+        display: inline-block !important;
+        overflow: hidden !important;
+        white-space: nowrap !important;
+        border-right: 4px solid #000000;
+        width: 7ch; /* длина слова "Кюарыч" */
+        animation:
+            typing 1.6s steps(7, end) forwards,
+            blink-caret .75s step-end 4;
     }
+
     .description {
         font-size: 18px !important;
         color: #666 !important;
@@ -110,7 +126,6 @@ st.markdown("""
         color: #000000 !important;
     }
     div[data-baseweb="input"] button:hover {
-        /* при любом фоне делаем текст белым, чтобы его было видно */
         color: #FFFFFF !important;
     }
 
