@@ -129,7 +129,7 @@ st.markdown(
         display: block !important;
     }
 
-    /* Кнопка Генерации */
+    /* Кнопка Генерации / продолжения */
     div.stButton > button {
         width: 100% !important;
         min-width: 300px !important;
@@ -379,10 +379,8 @@ def detect_white_rectangles_in_pdf(pdf_bytes: bytes):
 
 
 # --- ОБРАБОТКА PDF И ГЕНЕРАЦИЯ ZIP ---
-def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
+def process_files(pdf_bytes, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
     zip_buffer = io.BytesIO()
-    pdf_file.seek(0)
-    pdf_bytes = pdf_file.read()
     success_count = 0
     errors_log = []
     total_links = len(links)
@@ -523,41 +521,130 @@ def extract_links_from_excel(file) -> list:
     return clean_links
 
 
-# --- ВЕРСТКА ---
-col_left, col_spacer, col_right = st.columns([1.2, 0.1, 1.1])
+# --- ИНИЦИАЛИЗАЦИЯ СОСТОЯНИЯ ---
+if "step" not in st.session_state:
+    st.session_state.step = 1
+if "links_final" not in st.session_state:
+    st.session_state.links_final = []
+if "pdf_bytes" not in st.session_state:
+    st.session_state.pdf_bytes = None
+if "pdf_name" not in st.session_state:
+    st.session_state.pdf_name = None
+if "zip_result" not in st.session_state:
+    st.session_state.zip_result = None
+if "zip_name" not in st.session_state:
+    st.session_state.zip_name = None
 
-# ЛЕВАЯ КОЛОНКА
-with col_left:
+step = st.session_state.step
+
+# --- ШАПКА (общая для всех шагов) ---
+st.markdown(
+    '<div><div class="big-title">Кюарыч</div></div>',
+    unsafe_allow_html=True,
+)
+
+# --- ШАГ 1: ТОЛЬКО ССЫЛКИ ---
+if step == 1:
     st.markdown(
-        """
-    <div>
-        <div class="big-title">Кюарыч</div>
-        <div class="description">
-            Удобный помощник для маркетинг-команды. Загружайте макет,
-            вставляйте ссылки — а я красиво и точно расставлю QR-коды сам.
-        </div>
-    </div>
-    """,
+        '<div class="description">Удобный помощник для маркетинг-команды. Сначала укажи ссылки, для которых нужны QR-коды.</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="section-title">Источник ссылок QR</div>',
         unsafe_allow_html=True,
     )
 
-    st.markdown("<hr>", unsafe_allow_html=True)
+    tab_manual, tab_excel = st.tabs(["Вручную", "Из excel"])
 
+    with tab_manual:
+        manual_text = st.text_area(
+            "Ссылки списком",
+            height=180,
+            label_visibility="collapsed",
+            placeholder="https://",
+        )
+        if manual_text:
+            st.session_state.links_final = [
+                l.strip() for l in manual_text.split("\n") if l.strip()
+            ]
+
+    with tab_excel:
+        uploaded_excel = st.file_uploader(
+            "Excel", type=["xlsx"], key="xls", label_visibility="collapsed"
+        )
+        if uploaded_excel:
+            try:
+                uploaded_excel.seek(0)
+                links_from_excel = extract_links_from_excel(uploaded_excel)
+                st.session_state.links_final = links_from_excel
+
+                if len(links_from_excel) > 0:
+                    st.success(f"✅ Найдено ссылок: {len(links_from_excel)}")
+                    with st.expander("Показать найденные ссылки", expanded=False):
+                        for i, link in enumerate(links_from_excel, start=1):
+                            st.write(f"{i}. {link}")
+                else:
+                    st.warning(
+                        "Не удалось найти ссылки в файле. Проверьте, что в колонке есть URL или гиперссылки."
+                    )
+            except Exception as e:
+                st.error(f"Ошибка файла: {e}")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("Продолжить к загрузке макета"):
+        if not st.session_state.links_final:
+            st.toast("Нужны ссылки!", icon="⚠️")
+        else:
+            st.session_state.step = 2
+            st.experimental_rerun()
+
+# --- ШАГ 2: ЗАГРУЗКА PDF ---
+elif step == 2:
     st.markdown(
-        '<div class="section-title">Как назвать файл?</div>',
+        '<div class="section-title">Загрузите дизайн</div>',
         unsafe_allow_html=True,
     )
+    uploaded_pdf = st.file_uploader(
+        "PDF", type=["pdf"], key="pdf", label_visibility="collapsed"
+    )
+    if uploaded_pdf is not None:
+        st.info(f"Выбран файл: {uploaded_pdf.name}")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Назад"):
+            st.session_state.step = 1
+            st.experimental_rerun()
+    with col2:
+        if st.button("Продолжить к названию файла"):
+            if uploaded_pdf is None:
+                st.toast("Нужен PDF!", icon="⚠️")
+            else:
+                uploaded_pdf.seek(0)
+                st.session_state.pdf_bytes = uploaded_pdf.read()
+                st.session_state.pdf_name = uploaded_pdf.name
+                st.session_state.zip_result = None
+                st.session_state.zip_name = None
+                st.session_state.step = 3
+                st.experimental_rerun()
+
+# --- ШАГ 3: НАЗВАНИЕ + РЕЖИМ ВСТАВКИ ---
+elif step == 3:
+    if st.session_state.pdf_bytes is None:
+        st.session_state.step = 2
+        st.experimental_rerun()
+
+    st.markdown(
+        '<div class="section-title">Как назвать файл и куда вставить QR?</div>',
+        unsafe_allow_html=True,
+    )
+
     c1, c2 = st.columns(2)
     with c1:
-        partner_name = st.text_input("Имя партнера", placeholder="Partner")
+        partner_name = st.text_input("Имя партнера", value="", placeholder="Partner")
     with c2:
-        size_name = st.text_input("Размер файла", placeholder="0x0")
-
-    st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown(
-        '<div class="section-title">Куда вставить QR?</div>',
-        unsafe_allow_html=True,
-    )
+        size_name = st.text_input("Размер файла", value="", placeholder="0x0")
 
     mode = st.radio(
         "Режим позиционирования QR",
@@ -572,8 +659,7 @@ with col_left:
 <div style="border-radius: 12px; padding: 14px 16px; background-color:#F0F2FF; font-size:14px;">
 QR будет вставлен в найденный на макете белый квадрат с отступом 2 мм.<br>
 Если подходящий квадрат меньше 25 мм, коды не будут вставлены.
-</div>
-""",
+</div>""",
             unsafe_allow_html=True,
         )
         x_mm = y_mm = size_mm = 0.0
@@ -587,134 +673,57 @@ QR будет вставлен в найденный на макете белы�
         with g3:
             size_mm = st.number_input("Размер QR (мм)", value=20.0)
 
-# ПРАВАЯ КОЛОНКА
-with col_right:
-    st.write("")
-    st.write("")
-    st.markdown(
-        '<div class="description" style="margin-bottom:10px;">Источник ссылок QR</div>',
-        unsafe_allow_html=True,
-    )
-
-    if "links_final" not in st.session_state:
-        st.session_state.links_final = []
-
-    tab_manual, tab_excel = st.tabs(["Вручную", "Из excel"])
-
-    with tab_manual:
-        st.write("")
-        manual_text = st.text_area(
-            "Ссылки списком",
-            height=150,
-            label_visibility="collapsed",
-            placeholder="https://",
-        )
-        if manual_text:
-            st.session_state.links_final = [
-                l.strip() for l in manual_text.split("\n") if l.strip()
-            ]
-
-    with tab_excel:
-        st.write("")
-        uploaded_excel = st.file_uploader(
-            "Excel", type=["xlsx"], key="xls", label_visibility="collapsed"
-        )
-        if uploaded_excel:
-            try:
-                uploaded_excel.seek(0)
-                links_from_excel = extract_links_from_excel(uploaded_excel)
-                st.session_state.links_final = links_from_excel
-
-                if len(links_from_excel) > 0:
-                    st.success(f"✅ Найдено ссылок: {len(links_from_excel)}")
-                    st.markdown(
-                        "<div style='height:8px;'></div>",
-                        unsafe_allow_html=True,
-                    )
-                    with st.expander("Показать найденные ссылки", expanded=False):
-                        for i, link in enumerate(links_from_excel, start=1):
-                            st.write(f"{i}. {link}")
-                else:
-                    st.warning(
-                        "Не удалось найти ссылки в файле. Проверьте, что в колонке есть URL или гиперссылки."
-                    )
-            except Exception as e:
-                st.error(f"Ошибка файла: {e}")
-
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown(
-        '<div class="description" style="margin-bottom:10px;">Источник макета</div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        '<div class="section-title" style="margin-top:0;">Загрузите дизайн</div>',
-        unsafe_allow_html=True,
-    )
+    if st.button("Запустить генерацию"):
+        if not st.session_state.links_final:
+            st.toast("Нужны ссылки!", icon="⚠️")
+        elif not partner_name.strip() or not size_name.strip():
+            st.toast(
+                "Сначала задайте имя партнера и размер файла.",
+                icon="⚠️",
+            )
+        else:
+            p_n = partner_name.strip()
+            s_n = size_name.strip()
 
-    uploaded_pdf = st.file_uploader(
-        "PDF", type=["pdf"], key="pdf", label_visibility="collapsed"
-    )
+            res, errs = process_files(
+                st.session_state.pdf_bytes,
+                st.session_state.links_final,
+                p_n,
+                s_n,
+                pos_mode,
+                x_mm,
+                y_mm,
+                size_mm,
+            )
 
-    if "prev_pdf_name" not in st.session_state:
-        st.session_state.prev_pdf_name = None
-
-    current_pdf_name = uploaded_pdf.name if uploaded_pdf is not None else None
-    if current_pdf_name != st.session_state.prev_pdf_name:
-        st.session_state.prev_pdf_name = current_pdf_name
-        st.session_state.zip_result = None
-        st.session_state.zip_name = None
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    if "zip_result" not in st.session_state:
-        st.session_state.zip_result = None
-        st.session_state.zip_name = None
-
-    if st.session_state.zip_result is None:
-        if st.button("Генерация"):
-            if not uploaded_pdf:
-                st.toast("Нужен PDF!", icon="⚠️")
-            elif not st.session_state.links_final:
-                st.toast("Нужны ссылки!", icon="⚠️")
-            elif not partner_name.strip() or not size_name.strip():
-                st.toast(
-                    "Сначала задайте имя партнера и размер файла.",
-                    icon="⚠️",
-                )
+            if res:
+                st.session_state.zip_result = res
+                st.session_state.zip_name = f"{p_n}_{s_n}.zip"
+                st.session_state.step = 4
+                st.experimental_rerun()
             else:
-                p_n = partner_name.strip()
-                s_n = size_name.strip()
+                if errs:
+                    st.toast(errs[0], icon="⚠️")
+                st.error("Ошибка. Проверьте ссылки или макет.")
+                if errs:
+                    for e in errs:
+                        st.write(e)
 
-                res, errs = process_files(
-                    uploaded_pdf,
-                    st.session_state.links_final,
-                    p_n,
-                    s_n,
-                    pos_mode,
-                    x_mm,
-                    y_mm,
-                    size_mm,
-                )
+# --- ШАГ 4: ГОТОВО + КНОПКА СКАЧАТЬ ---
+elif step == 4:
+    if st.session_state.zip_result is None:
+        st.session_state.step = 3
+        st.experimental_rerun()
 
-                if res:
-                    st.session_state.zip_result = res
-                    st.session_state.zip_name = f"{p_n}_{s_n}.zip"
-                    st.experimental_rerun()
-                else:
-                    if errs:
-                        st.toast(errs[0], icon="⚠️")
-                    st.error("Ошибка. Проверьте ссылки или макет.")
-                    if errs:
-                        for e in errs:
-                            st.write(e)
-    else:
-        st.download_button(
-            "Скачать архив",
-            st.session_state.zip_result,
-            st.session_state.zip_name or "qrs.zip",
-            "application/zip",
-        )
-        st.caption(
-            "После нажатия дождитесь начала загрузки и не нажимайте\n"
-            "кнопку несколько раз подряд."
-        )
+    st.success("Готово! Архив с PDF-файлами подготовлен.")
+    st.download_button(
+        "Скачать архив",
+        st.session_state.zip_result,
+        st.session_state.zip_name or "qrs.zip",
+        "application/zip",
+    )
+    st.caption(
+        "После нажатия дождитесь начала загрузки и не нажимайте\n"
+        "кнопку несколько раз подряд."
+    )
