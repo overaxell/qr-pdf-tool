@@ -41,12 +41,12 @@ st.markdown(
         100% {transform: scale(1);}
     }
 
-    /* typewriter для "Кюарыч " (7 букв + пробел = 8 символов) */
+    /* typewriter для "Кюарыч" (7 символов) */
     @keyframes typing {
         0%   { width: 0; }
-        20%  { width: 8ch; }  /* ~2 сек — набор */
-        80%  { width: 8ch; }  /* пауза с полным словом */
-        100% { width: 0; }    /* стирание */
+        20%  { width: 7.2ch; }  /* ~2 сек — набор */
+        80%  { width: 7.2ch; }  /* пауза с полным словом */
+        100% { width: 0; }      /* стирание */
     }
     @keyframes blink-caret {
         from, to { border-color: transparent; }
@@ -63,9 +63,9 @@ st.markdown(
         overflow: hidden !important;
         white-space: nowrap !important;
         border-right: 4px solid #000000;
-        width: 8ch;
+        width: 7.2ch;
         animation:
-            typing 10s steps(8, end) infinite,
+            typing 10s steps(7, end) infinite,
             blink-caret .75s step-end infinite;
     }
 
@@ -200,7 +200,7 @@ st.markdown(
         margin: 0;
     }
 
-    /* Табы: убираем серый underline, оставляем только чёрный у активного */
+    /* Табы: только чёрный underline у активного */
     .stTabs [data-baseweb="tab-list"] {
         border-bottom: 0 !important;
         box-shadow: none !important;
@@ -290,7 +290,7 @@ def _detect_white_rectangles_raster(
         min_y = max_y = sy
 
         while stack:
-            x, y = stack.pop()
+            x, y = stack.pop():
 
             if x < min_x:
                 min_x = x
@@ -541,7 +541,7 @@ with col_left:
     st.markdown(
         """
     <div>
-        <div class="big-title">Кюарыч&nbsp;</div>
+        <div class="big-title">Кюарыч</div>
         <div class="description">
             Удобный помощник для маркетинг-команды. Загружайте макет,
             вставляйте ссылки — а я красиво и точно расставлю QR-коды сам.
@@ -577,9 +577,14 @@ with col_left:
 
     if mode == "Автообнаружение":
         pos_mode = "white_rect"
-        st.info(
-            "QR будет вставлен в найденный на макете белый квадрат с отступом 2 мм.\n"
-            "Если подходящий квадрат меньше 25 мм, коды не будут вставлены."
+        st.markdown(
+            """
+<div style="border-radius: 12px; padding: 14px 16px; background-color:#F0F2FF; font-size:14px;">
+QR будет вставлен в найденный на макете белый квадрат с отступом 2 мм.<br>
+Если подходящий квадрат меньше 25 мм, коды не будут вставлены.
+</div>
+""",
+            unsafe_allow_html=True,
         )
         x_mm = y_mm = size_mm = 0.0
     else:
