@@ -89,7 +89,7 @@ st.markdown(
         animation: fadeInSoft 0.4s ease-out;
     }
 
-    /* INPUT / NUMBER_INPUT */
+    /* INPUT / NUMBER_INPUT: общий контейнер */
     div[data-baseweb="input"] {
         border-radius: 14px !important;
         border: 1px solid #E0E0E0 !important;
@@ -116,6 +116,22 @@ st.markdown(
         background-color: transparent !important;
     }
 
+    /* Делаем number_input визуально как text_input:
+       убираем стрелки/спиннеры и плюс/минус-кнопки */
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+    input[type="number"] {
+        -moz-appearance: textfield;
+    }
+    div[data-baseweb="input"] button[aria-label="Increment"],
+    div[data-baseweb="input"] button[aria-label="Decrement"] {
+        display: none !important;
+    }
+
+    /* Кнопки внутри инпутов (на всякий случай, если появятся) */
     div[data-baseweb="input"] button {
         background-color: #F5F5F5 !important;
         color: #000000 !important;
@@ -613,108 +629,3 @@ with col_right:
             st.session_state.links_final = [
                 l.strip() for l in manual_text.split("\n") if l.strip()
             ]
-
-    with tab_excel:
-        st.write("")
-        uploaded_excel = st.file_uploader(
-            "Excel", type=["xlsx"], key="xls", label_visibility="collapsed"
-        )
-        if uploaded_excel:
-            try:
-                uploaded_excel.seek(0)
-                links_from_excel = extract_links_from_excel(uploaded_excel)
-                st.session_state.links_final = links_from_excel
-
-                if len(links_from_excel) > 0:
-                    st.success(f"✅ Найдено ссылок: {len(links_from_excel)}")
-                    st.markdown(
-                        "<div style='height:8px;'></div>",
-                        unsafe_allow_html=True,
-                    )
-                    with st.expander("Показать найденные ссылки", expanded=False):
-                        for i, link in enumerate(links_from_excel, start=1):
-                            st.write(f"{i}. {link}")
-                else:
-                    st.warning(
-                        "Не удалось найти ссылки в файле. Проверьте, что в колонке есть URL или гиперссылки."
-                    )
-            except Exception as e:
-                st.error(f"Ошибка файла: {e}")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown(
-        '<div class="description" style="margin-bottom:10px;">Источник макета</div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        '<div class="section-title" style="margin-top:0;">Загрузите дизайн</div>',
-        unsafe_allow_html=True,
-    )
-
-    uploaded_pdf = st.file_uploader(
-        "PDF", type=["pdf"], key="pdf", label_visibility="collapsed"
-    )
-
-    if "prev_pdf_name" not in st.session_state:
-        st.session_state.prev_pdf_name = None
-
-    current_pdf_name = uploaded_pdf.name if uploaded_pdf is not None else None
-    if current_pdf_name != st.session_state.prev_pdf_name:
-        st.session_state.prev_pdf_name = current_pdf_name
-        st.session_state.zip_result = None
-        st.session_state.zip_name = None
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    if "zip_result" not in st.session_state:
-        st.session_state.zip_result = None
-        st.session_state.zip_name = None
-
-    if st.session_state.zip_result is None:
-        if st.button("Генерация"):
-            if not uploaded_pdf:
-                st.toast("Нужен PDF!", icon="⚠️")
-            elif not st.session_state.links_final:
-                st.toast("Нужны ссылки!", icon="⚠️")
-            elif not partner_name.strip() or not size_name.strip():
-                st.toast(
-                    "Сначала задайте имя партнера и размер файла.",
-                    icon="⚠️",
-                )
-            else:
-                p_n = partner_name.strip()
-                s_n = size_name.strip()
-
-                res, errs = process_files(
-                    uploaded_pdf,
-                    st.session_state.links_final,
-                    p_n,
-                    s_n,
-                    pos_mode,
-                    x_mm,
-                    y_mm,
-                    size_mm,
-                )
-
-                if res:
-                    st.session_state.zip_result = res
-                    st.session_state.zip_name = f"{p_n}_{s_n}.zip"
-                    st.experimental_rerun()
-                else:
-                    if errs:
-                        st.toast(errs[0], icon="⚠️")
-                    st.error("Ошибка. Проверьте ссылки или макет.")
-                    if errs:
-                        for e in errs:
-                            st.write(e)
-    else:
-        st.download_button(
-            "Скачать архив",
-            st.session_state.zip_result,
-            st.session_state.zip_name or "qrs.zip",
-            "application/zip",
-        )
-        st.caption(
-            "После нажатия дождитесь начала загрузки и не нажимайте\n"
-            "кнопку несколько раз подряд."
-        )
