@@ -185,10 +185,11 @@ st.markdown("""
         margin: 0;
     }
 
-    /* Табы: убираем лишний статичный underline у всего списка,
-       оставляем только нижнюю линию у активного таба */
+    /* Табы: убираем базовый серый underline (border + box-shadow),
+       остаётся только чёрная линия активного таба */
     .stTabs [data-baseweb="tab-list"] {
         border-bottom: 0 !important;
+        box-shadow: none !important;
     }
     .stTabs [aria-selected="true"] {
         color: #000 !important;
