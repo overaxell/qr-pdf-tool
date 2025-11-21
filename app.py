@@ -14,11 +14,12 @@ st.set_page_config(
     page_title="Кюарыч",
     page_icon="▪️",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed",
 )
 
 # --- CSS СТИЛИ + АНИМАЦИИ ---
-st.markdown("""
+st.markdown(
+    """
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;800&display=swap" rel="stylesheet">
 <style>
     .stApp {background-color: #FFFFFF !important;}
@@ -42,10 +43,10 @@ st.markdown("""
 
     /* typewriter для "Кюарыч " (7 букв + пробел = 8 символов) */
     @keyframes typing {
-        0%   { width: 0;   }
-        20%  { width: 8ch; }  /* примерно первые 2 секунды — печать */
-        80%  { width: 8ch; }  /* 2–8 сек — пауза с полным словом */
-        100% { width: 0;   }  /* 8–10 сек — стирание */
+        0%   { width: 0; }
+        20%  { width: 8ch; }  /* ~2 сек — набор */
+        80%  { width: 8ch; }  /* пауза с полным словом */
+        100% { width: 0; }    /* стирание */
     }
     @keyframes blink-caret {
         from, to { border-color: transparent; }
@@ -62,7 +63,7 @@ st.markdown("""
         overflow: hidden !important;
         white-space: nowrap !important;
         border-right: 4px solid #000000;
-        width: 8ch;  /* под 8 шагов (7 букв + невидимый пробел) */
+        width: 8ch;
         animation:
             typing 10s steps(8, end) infinite,
             blink-caret .75s step-end infinite;
@@ -163,7 +164,7 @@ st.markdown("""
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.10);
     }
 
-    /* Кнопка скачивания — маджента + пульс, когда видна */
+    /* Кнопка скачивания — маджента + пульс */
     div.stDownloadButton > button {
         width: 100% !important;
         min-width: 300px !important;
@@ -199,8 +200,7 @@ st.markdown("""
         margin: 0;
     }
 
-    /* Табы: убираем базовый серый underline (border + box-shadow),
-       остаётся только чёрная линия активного таба */
+    /* Табы: убираем серый underline, оставляем только чёрный у активного */
     .stTabs [data-baseweb="tab-list"] {
         border-bottom: 0 !important;
         box-shadow: none !important;
@@ -212,7 +212,9 @@ st.markdown("""
 
     hr {border-color: #eee !important; margin: 24px 0 !important;}
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # --- КОНСТАНТЫ ---
 MM_TO_POINT = 72 / 25.4
@@ -399,13 +401,10 @@ def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
             white_rects_raw = detect_white_rectangles_in_pdf(pdf_bytes)
             min_size_mm = 25.0
             white_rects = [
-                r for r in white_rects_raw
-                if min(r[2], r[3]) / MM_TO_POINT >= min_size_mm
+                r for r in white_rects_raw if min(r[2], r[3]) / MM_TO_POINT >= min_size_mm
             ]
             if not white_rects:
-                errors_log.append(
-                    "Белый квадрат не найден или его сторона меньше 25 мм."
-                )
+                errors_log.append("Белый квадрат не найден или его сторона меньше 25 мм.")
                 return None, errors_log
         except Exception as e:
             errors_log.append(f"Автообнаружение: ошибка {e}")
@@ -445,7 +444,10 @@ def process_files(pdf_file, links, p_name, p_size, mode, x_mm, y_mm, size_mm):
                             qr_size_pt = mm_to_pt(size_mm)
 
                         rect = fitz.Rect(
-                            x_pt, y_pt, x_pt + qr_size_pt, y_pt + qr_size_pt
+                            x_pt,
+                            y_pt,
+                            x_pt + qr_size_pt,
+                            y_pt + qr_size_pt,
                         )
                         page.insert_image(rect, stream=qr_bytes)
 
@@ -576,7 +578,7 @@ with col_left:
     if mode == "Автообнаружение":
         pos_mode = "white_rect"
         st.info(
-            "QR будет вставлен в найденный на макете белый квадрат с отступом 2 мм. "
+            "QR будет вставлен в найденный на макете белый квадрат с отступом 2 мм.\n"
             "Если подходящий квадрат меньше 25 мм, коды не будут вставлены."
         )
         x_mm = y_mm = size_mm = 0.0
@@ -631,7 +633,8 @@ with col_right:
                 if len(links_from_excel) > 0:
                     st.success(f"✅ Найдено ссылок: {len(links_from_excel)}")
                     st.markdown(
-                        "<div style='height:8px;'></div>", unsafe_allow_html=True
+                        "<div style='height:8px;'></div>",
+                        unsafe_allow_html=True,
                     )
                     with st.expander("Показать найденные ссылки", expanded=False):
                         for i, link in enumerate(links_from_excel, start=1):
@@ -679,7 +682,10 @@ with col_right:
             elif not st.session_state.links_final:
                 st.toast("Нужны ссылки!", icon="⚠️")
             elif not partner_name.strip() or not size_name.strip():
-                st.toast("Сначала задайте имя партнера и размер файла.", icon="⚠️")
+                st.toast(
+                    "Сначала задайте имя партнера и размер файла.",
+                    icon="⚠️",
+                )
             else:
                 p_n = partner_name.strip()
                 s_n = size_name.strip()
@@ -714,5 +720,6 @@ with col_right:
             "application/zip",
         )
         st.caption(
-            "После нажатия дождитесь начала загрузки и не нажимайте\nкнопку несколько раз подряд."
+            "После нажатия дождитесь начала загрузки и не нажимайте\n"
+            "кнопку несколько раз подряд."
         )
