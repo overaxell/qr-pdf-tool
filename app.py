@@ -30,10 +30,6 @@ st.markdown("""
     }
 
     /* АНИМАЦИИ */
-    @keyframes fadeUp {
-        0% {opacity: 0; transform: translateY(8px);}
-        100% {opacity: 1; transform: translateY(0);}
-    }
     @keyframes fadeInSoft {
         0% {opacity: 0;}
         100% {opacity: 1;}
@@ -43,14 +39,17 @@ st.markdown("""
         50%  {transform: scale(1.02);}
         100% {transform: scale(1);}
     }
-    /* typewriter для заголовка "Кюарыч" (7 символов) */
+
+    /* typewriter для "Кюарыч " (7 букв + пробел = 8 символов) */
     @keyframes typing {
-        from { width: 0; }
-        to   { width: 7ch; }
+        0%   { width: 0;   }
+        20%  { width: 8ch; }  /* примерно первые 2 секунды — печать */
+        80%  { width: 8ch; }  /* 2–8 сек — пауза с полным словом */
+        100% { width: 0;   }  /* 8–10 сек — стирание */
     }
     @keyframes blink-caret {
         from, to { border-color: transparent; }
-        50% { border-color: #000000; }
+        50%      { border-color: #000000; }
     }
 
     .big-title {
@@ -63,10 +62,10 @@ st.markdown("""
         overflow: hidden !important;
         white-space: nowrap !important;
         border-right: 4px solid #000000;
-        width: 7ch; /* длина слова "Кюарыч" */
+        width: 8ch;  /* под 8 шагов (7 букв + невидимый пробел) */
         animation:
-            typing 1.6s steps(7, end) forwards,
-            blink-caret .75s step-end 4;
+            typing 10s steps(8, end) infinite,
+            blink-caret .75s step-end infinite;
     }
 
     .description {
@@ -540,7 +539,7 @@ with col_left:
     st.markdown(
         """
     <div>
-        <div class="big-title">Кюарыч</div>
+        <div class="big-title">Кюарыч&nbsp;</div>
         <div class="description">
             Удобный помощник для маркетинг-команды. Загружайте макет,
             вставляйте ссылки — а я красиво и точно расставлю QR-коды сам.
