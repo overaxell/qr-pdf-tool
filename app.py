@@ -699,7 +699,8 @@ with col_right:
                 if res:
                     st.session_state.zip_result = res
                     st.session_state.zip_name = f"{p_n}_{s_n}.zip"
-                    st.experimental_rerun()
+                    # Замена experimental_rerun на актуальный вызов
+                    st.rerun()
                 else:
                     if errs:
                         st.toast(errs[0], icon="⚠️")
